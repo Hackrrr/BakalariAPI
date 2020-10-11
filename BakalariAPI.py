@@ -249,7 +249,7 @@ def ZiskejVsechnyKomensIDs(URL: str, session: requests.Session):
 
 def ZiskejZnamky(URL: str, session: requests.Session) -> list[Znamka]:
     output = []
-    response = session.get(URL + Endpoint_Znamky)
+    response = session.get(URL + Endpoint_Znamky+ "?dfrom=0001010000&subt=obdobi")
     soup = BeautifulSoup(response.content, "html.parser")
     znamkyList = soup.find(id="cphmain_DivBySubject")("div", attrs={"data-clasif": True})
     for znamka in znamkyList:
@@ -270,14 +270,86 @@ def ZiskejZnamky(URL: str, session: requests.Session) -> list[Znamka]:
         ))
     return output
             
-def ZiskejUkoly(URL: str, session: requests.Session) -> list[Ukol]:
-    output = []
-    response = session.post(URL + Endpoint_Ukoly, json={
-        "": "200", #Počet úkolů (pravděpodobně); Najít tohle byl extrémní pain, takže doufám, že je to ono... (Chrome totiž robrazí POST data které jsou "&=HODNOTA" jakožto "(empty)", takže se nejde "normálně" podívat, co to je)
-        "cphmain_drpDate_VI": "all"
-    })
-    soup = BeautifulSoup(response.content, "html.parser")
-    element = soup.find(id="cphmain_drpDate_I")
-    print(element.prettify())
-    return
-    ukolyList = soup.find(id="grdukoly_DXMainTable")("tr", attrs={"data-clasif": True})
+# def ZiskejUkoly(URL: str, session: requests.Session) -> list[Ukol]:
+#     output = []
+#     response = session.post(URL + Endpoint_Ukoly, json={
+#         "": "200", #Počet úkolů (pravděpodobně); Najít tohle byl extrémní pain, takže doufám, že je to ono... (Chrome totiž robrazí POST data které jsou "&=HODNOTA" jakožto "(empty)", takže se nejde "normálně" podívat, co to je)
+#         "cphmain_drpDate_VI": "all"
+#     })
+#     soup = BeautifulSoup(response.content, "html.parser")
+#     element = soup.find(id="cphmain_drpDate_I")
+#     print(element.prettify())
+#     return
+#     ukolyList = soup.find(id="grdukoly_DXMainTable")("tr", attrs={"data-clasif": True})
+
+
+
+
+
+
+
+
+
+Endpoints = {
+    "login":            "/login",
+    "dashboard":        "/dashboard",
+    "komens":           "/next/komens.aspx",
+    "komens_ziskej":    "/next/komens.aspx/GetMessageData",
+    "komens_potvrdit":  "/next/komens.aspx/SetMessageConfirmed",
+    "soubor":           "/next/getFile.aspx",
+    "znamky":           "/next/prubzna.aspx"
+}
+
+#Endpoint_Komens_Odeslane = "/next/komens.aspx?l=o"
+Endpoint_Ukoly = "/next/ukoly.aspx" # Pouze "Aktivní" (a pouze 20)
+Endpoint_Rozvrh = "/next/rozvrh.aspx"
+Endpoint_Lifetime_Remaining = "/sessioninfo" #Vrátí zbýcající čas přihlášení; posílá se současná UNIX timestamp jako "_" GET parametr, ale funguje i bez toho
+Endpoint_Lifetime_Extend = "/sessionextend" #Prodlouží čas přihlášení na 900s (= 15 minut); posílá se současná UNIX timestamp jako "_" GET parametr, ale funguje i bez toho
+
+
+class Server:
+    """Třída/objekt držící informace o serveru na kterém běží Bakaláři"""
+    def __init__(self, url: str):
+        self.url = url
+    
+    def Bezi(self) -> bool:
+        try:
+            response = requests.get(self.url)
+            response.raise_for_status()
+            if not response.url.endswith(Endpoint_Login):
+                warnings.warn(f"Server nepřesměroval na přihlašovací stránku (současná stránka: '{response.url}')", Exceptions.NecekaneChovani)
+        except (requests.exceptions.InvalidSchema, requests.exceptions.InvalidURL) as e:
+            raise Exceptions.ChybaVstupu from e
+        except requests.exceptions.BaseHTTPError as e:
+            raise Exceptions.ChybaPripojeni from e
+        except requests.exceptions.RequestException as e:
+            raise Exceptions.ChybaPripojeni from e
+        return True
+    
+    def ZiskejEndpoint(self, endpoint: str) -> str:
+        pass
+
+class Uzivatel:
+    def __init__(self, jmeno: str, heslo: str):
+        self.jmeno = jmeno
+        self.heslo = heslo
+        
+
+class Session:
+    def __init__(self, server: Server, uzivatel: Uzivatel, login: bool):
+        self.server = server
+        self.uzivatel = uzivatel
+        self.session: requests.Session = requests.Session()
+
+
+    def Login(self):
+        session = requests.session()
+        response = session.post(self.server.url + Endpoint_Login, {
+            "username": user,
+            "password": password
+        })
+        if response.url.endswith(Endpoint_Login):
+            raise Exceptions.ChybaAutentizace
+        if not response.url.endswith(Endpoint_Dashboard):
+            warnings.warn(f"Neočekavané přesměrování na '{response.url}'", Exceptions.NecekaneChovani)
+        return session
