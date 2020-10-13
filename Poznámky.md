@@ -4,11 +4,11 @@ Nejedná se tedy o dokumentaci k `BakalariAPI`, ale spíše jedná se spíše o 
 Pro vytažení dat z HTML používajá `BakalariAPI` modul `BeautifulSoup4` (zkráceně `bs4`) ([link zde](https://www.crummy.com/software/BeautifulSoup/)) a příklady jeho využití zde nejsou... Pokud ale hledáte tutoriál k `bs4`, tak bych doporučil [toto](https://realpython.com/beautiful-soup-web-scraper-python/).
 # Moje vyjádření k Bakalářům
 Za tu dobu, co se vrtám v IT jsem toho viděl už relativně dost. A zcela určitě můžu prohlásit, že Bakaláři je snad to nejhorší co jsem viděl... Jen se podívejte na to, co za prasárny se tam děje... Vypadá to jak kdyby to dělalo 30 lidí, každý měl jinou představu, jak by to mělo fungovat a tak to udělal každý po svém. 80% věcí je dělaných jedním způsobem, dalších 75% jiným, následujících 60% je něco mezitím a těch zbylích 30% je každý nějak jinak. Nehledě na to, že referencujou snad všechny knihovny, co našli... Jediný co se dá na Bakalářích pochválit je design (což je actually asi jedniná věc o kterou se koncový uživatel stará). Ok, dokážu přehlédnout neexistenci "normálního" API - třeba to chtěli udělat těžší pro ty, co to budou revesovat (a stejně tu jsou určitý věci přes API)... Ale prostě... Dám příklad úkolů (což je asi největší prasárna ze všech):<br>
-Pomineme první načtení (na to nemám nervy rozepisovat)... Když chcete změnit velikost stránky, tak se pošle request s doslova víc jak 10ti hodnotama, znichž většina z jich jsou doslova statická data, vrátí se JSON, který má v sobě HTML, které se vloží na stránku a teto HTML spustí JS (protože má v sobě asi 6 `<script>` tagů), které vezmou to HTML, přetransformujou ho a přemístí... Actually co to jakože je za blbost? Ok, uvažujme to, že jsme to nějak střebali, teď už tu nic hrozného ne- Je. Tohle se stane, když chcete zobrazit víc výsledků na stránce, ale když chcete zobrazit další stránku, tak se stránka načte znovu... Jo to zní jednodušeji, **ale proč by to někdo dělal, když už tu je ta druhá cesta, která už je hotová, (bohužel) funguje a ušetří přenos dat?!**<br>
+Pomineme první načtení (na to nemám nervy rozepisovat)... Když chcete změnit velikost stránky, tak se pošle request s doslova víc jak 10ti hodnotama, znichž většina z jich jsou doslova statická data, vrátí se JSON, který má v sobě HTML, které se vloží na stránku a toto HTML spustí JS (protože má v sobě asi 6 `<script>` tagů), které vezmou to HTML, přetransformujou ho a přemístí... Můžemi někdo prosím vysvětlit, proč?! Proč by někdo dělal něco takovýho?! Ok, uvažujme to, že jsme to nějak střebali, teď už tu nic hrozného ne- Je. Tohle se stane, když chcete zobrazit víc výsledků na stránce, ale když chcete zobrazit další stránku, tak se stránka načte znovu... Jo to zní jednodušeji, **ale proč by to někdo dělal, když už tu je ta druhá cesta, která už je hotová, (bohužel) funguje?!**<br>
 Tak toto bylo moje vyjádření k Bakalářům :)
 
 # Endpointy
-Zde jsou poznámky, co se kam posílá, proč a jak se z toho dostávají věci, co chceme...
+Zde jsou poznámky, co se kam a proč posílá a jak se z toho dostávají věci, co chceme...
 ## **/login**
 #### Klíč: `login`
 Přihlašovací stránka - formulář s jménem a heslem. Měl by sem redirectovat i request/response na index (tzn. "/").
@@ -19,6 +19,10 @@ username=*JMENO*&password=*HESLO*
 ```
 Při přihlašování ručně se posílají navíc ještě parametry `"&returnUrl=&login="`, ale pro přihlášení není potřeba.
 Při úspěčném přihlášení přesměruje na `/dashboard`.
+
+## **/logout**
+#### Klíč: `logout`
+Odhlásí uživatele. Toť vše. Neposíláme žádný parametry, jen requestneme stránku.
 
 ## **/dashboard**
 #### Klíč: `dashboard`
@@ -57,7 +61,7 @@ Teď jak získat data co potřebujem (resp. pouze ID zpráv). To co nás zajím�
 Všechny ID zpráv začínají písmenem "U", resp. nenašel jsem příkad, kde by tomu tak nebylo. Je dost možný, že podle jejich ID jde něco poznat (občas nalezen pattern IDček, ale nebyl ještě zkoumán).
 
 ## **/next/komens.aspx/GetMessageData**
-#### Klíč: `komens_ziskej`
+#### Klíč: `komens_get`
 Tento endpoint je pro nás čistý zdroj dat. Manuálně se k němu nedostanete a musíte "odchytit" provoz při zobrazování zprávy. Posíláme na něj POST request s IDčkem zprávy a kontextem (poznámka k němu dál) zakodované v JSONu a vrátí se nám JSON data o dané zprávě. Request vypadá následovně:
 ```http
 POST /next/komens.aspx/GetMessageData HTTP/1.1
@@ -110,7 +114,7 @@ Pokud má zpráva přílohu/přílohy, tak klíč `"Files"` má array objektů s
 Vypadá to, že soubor se váže k určité zprávě (klíč `"idmsg"` se shoduje s ID zprávy). Pro klíč `"path"` se zatím nenašlo využití.
 
 ## **/next/komens.aspx/SetMessageConfirmed**
-#### Klíč: `komens_potvrdit`
+#### Klíč: `komens_confirm`
 K tomuto endpointu se opět dostanete po odchycení requestů při potvrzování zprávy. Opět se jedná o POST request a opět s IDčkem zprávy zakódované v JSONu:
 ```http
 POST /next/komens.aspx/SetMessageConfirmed HTTP/1.1
@@ -123,14 +127,14 @@ Zpět dostáváme zprávu v JSONu (nejspíše) o úspěchu potvrzení (zatím ne
 Co znamená `"d"`se nezjistilo.
 
 ## **/next/getFile.aspx**
-#### Klíč: `soubor`
+#### Klíč: `file`
 Endpoint pro stahování souborů (z Komensu). Posílá se get request s parametrem `"f"` s hodnotou IDčka souboru. Request vypadá následovně:
 ```http
 GET /next/getFile.aspx?f=*ID_SOUBORU* HTTP/1.1
 ```
 
 ## **/next/prubzna.aspx**
-#### Klíč: `znamky`
+#### Klíč: `grades`
 *(Ano, je to **prubzna**, není to překlep (jakože nejspíš je, ale ne můj)...)*<br>
 Pro normálního uživatele soupis známek. Pro nás je to zdroj známek:
 ```http
@@ -176,3 +180,15 @@ A `<div class="znamky">` obsahuje další `<div>`, které mají jako `id` ID zn�
 }
 ```
 Tenhle JSON je bordel sám o sobě... "Hlavní název" známky je klíč `"caption"`. Další info ke známce je v klíči `"poznamkakzobrazeni"` a také v klíči `"MarkTooltip"`. Klíč `"datum"` je úplně k ničemu a je pořád stejný. Za to klíče `"strdatum"` a `"udel_datum"` oba obsahují (nějaký) datum, který je ve většině případě stejný (ale ne konstantní), ale může se i lišit (normálnímu uživateli se může ale zobrazit pouze klíč `"strdatum"`). Předmět má pak klíč `"nazev"` a hodnota známky má pak klíč `"MarkText"`. Další klíče jsou snad pochopitelné (i když třeba osobně nechápu klíč `"bodymax"`).
+## **/sessioninfo**
+#### Klíč: `session_info`
+Endpoint který je pro normálního uživatele opět nedostupný. Normálně se sem posílá v určitém intervalu (jaký je se nezjistilo a je možný, že je dynamický) GET request s parametrem `"_"`, který má hodnoutu UNIX timestampy klienta. Z testování se má za to, že tato UNIX timestamp je k ničemu a endpoint funguje i bez toho. Vrací se JSON v podobě:
+```JSON
+{"success":true,"error":"","data":{"remainingTime":500.12345,"sessionDuration":15.0}}
+```
+Pro nás má užitek jen informace o tom, kolik zbývá (`"remainingTime"`) a jak dlouhá je maxiálně sesssion bez prodloužení (`"sessionDuration"`).<br>
+Klient ověřuje, jestli `"remainingTime"` je pod určitou hranicí a popř. zobrazí dialog ve smyslu *"Jste tu? Jestli jo, zmáčkmi tlačítko"*, popř. (pokud `"remainingTime"` je 0) zobrazí dialog *"Jste dlouho offline a proto jsme vás z DŮVODU BEZPEČNOSTI odhlásili. (+ tlačíko)"*.
+## **/sessionextend**
+#### Klíč: `session_extend`
+### **Vyžaduje se přeskoumání - Pravděpodobně funguje jen od určité (prcentuální/zbývající) doby**
+V podstatě stejný jak **`/sessioninfo`**. Normálně nedostupný, posílá se na něj GET request s parametrem `"_"`, který má hodnotu UNIX timestampy uživatele a který je opět k ničemu a opět endpoint funguje i bez toho. Mění se akorát "funkčnost", která ale není vidět - prodluží session (zpátky) na maximální životnost. Nevrací se nic.

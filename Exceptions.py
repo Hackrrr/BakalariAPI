@@ -1,23 +1,25 @@
-class Vyjimka(Exception):
+class Exception(Exception):
     """Základní exception classa pro BakalariAPI
     Všechny výjimky mají dědičnou cestu k této výjimky"""
 
 
-class ChybaAutentizace(Vyjimka):
-    """Authentization error"""
+class AuthenticationException(Exception):
+    """Výjimka při autentizaci"""
 
-class ChybaPripojeni(Vyjimka):
-    """Sever/web exception, when service is unavalible"""
+class ConnectionException(Exception):
+    """Výjimka při chybě při pokusu o připojení - Server nebo Bakaláři pravděpodobně neběží"""
 
-class ChybaVstupu(Vyjimka):
-    """Invalid input exception"""
+class InputException(Exception):
+    """Výjimka při chybném vstupu"""
+    
+class UserNotLoggedIn(Exception):
+    """Výjimka při pokusu o vykonání autentizované akci, když uživatel není přihlášen"""
 
 
-
-class Varovani(UserWarning):
+class Warning(UserWarning):
      """Základní warning classa pro BakalariAPI
     Všechny varování mají dědičnou cestu k tomuto varování"""
 
 
-class NecekaneChovani(Varovani):
+class UnexpectedBehaviour(Warning):
     """Nečekaná odpoveď/přesměrování od serveru (pravděpodobně na serveru běží jiná (nová) veze Bakalařů)"""

@@ -35,57 +35,80 @@ interactive = args.interactive
 def cls():
     os.system('cls' if os.name=='nt' else 'clear')
 
-print(f"Kontrola stavu serveru/webu... ({url})")
-loginURL = url
+def AnoNeDialog() -> bool:
+    while True:
+        inputLetter = input("Zpráva vyžaduje potvrzení. Chcete potvrdit přečtení? Ano/Ne (y/n): ")[0].lower() # ano/yes/1 / ne/no/0
+        if inputLetter in "ay1":
+            return True
+        elif inputLetter in "n0":
+            return False
+        print("Špatná hodnota")
+
 try:
-    if BakalariAPI.JeServerOnline(url):
-        print("Sever/web běží")
-except BakalariAPI.Exceptions.ChybaVstupu:
+    API = BakalariAPI.BakalariAPI(
+        BakalariAPI.Server(url),
+        user,
+        password,
+        False
+    )
+except BakalariAPI.Exceptions.InputException:
     print("Neplatné URL schéma; Končím")
     exit(1)
-except BakalariAPI.Exceptions.ChybaPripojeni:
+
+
+print(f"Kontrola stavu serveru/webu... ({url})")
+
+if not API.server.Running():
     print("Severver/web (pravděpodobně) neběží; Končím")
     exit(1)
+
+print("Sever/web běží")
 
 print(f"Pokus o přihlášení jako '{user}'")
 
 try:
-    session = BakalariAPI.Login(url, user, password)    
-except BakalariAPI.Exceptions.ChybaAutentizace:
+    API.Login(False)
+except BakalariAPI.Exceptions.AuthenticationException:
     print("Nepovedlo se přihlásit (nesprávné přihlašovací údaje)")
     exit(1)
 
 print("Přihlášení úspěšné")
 
+#TODO: Init
+
 # Login done, now parse and extract
 
 print("Získávám zprávy...")
-#zpravyIDs = BakalariAPI.ZiskejKomensIDs(url, session)
-zpravyIDs = BakalariAPI.ZiskejKomensIDs(url, session)
+zpravyIDs = API.GetKomensIDs()
 zpravy = []
 for ID in zpravyIDs:
     print(f"Získávám Komens zprávu (ID: {ID})")
-    zpravy.append(BakalariAPI.ZiskejKomens(url, session, ID))
+    zpravy.append(API.GetKomens(ID))
 print("Zprávy získány, zobrazuji...")
 if interactive:
     cls()
 for zprava in zpravy:
+    print("*** Zpráva ***")
     print(zprava.Format())
     print("\r\n\r\n")
     if interactive:
+        if zprava.confirm and not zprava.confirmed and AnoNeDialog():
+            print("Potvrzuji zprávu")
+            zprava.Confirm()
         input("Pro pokračování stiskni klávasu...")
         cls()
 
 print("Získávám známky...")
-znamky = BakalariAPI.ZiskejZnamky(url, session)
+znamky = API.GetMarks()
 print("Známky získány, zobrazuji...")
 if interactive:
     cls()
 for znamka in znamky:
+    print("*** Známka ***")
     print(znamka.Format())
     print("\n")
     if interactive:
         input("Pro pokračování stiskni klávasu...")
         cls()
 
-BakalariAPI.ProdluzPrihlaseni(url, session)
+API.Logout()
