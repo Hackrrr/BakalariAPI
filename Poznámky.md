@@ -192,3 +192,13 @@ Klient ověřuje, jestli `"remainingTime"` je pod určitou hranicí a popř. zob
 #### Klíč: `session_extend`
 ### **Vyžaduje se přeskoumání - Pravděpodobně funguje jen od určité (prcentuální/zbývající) doby**
 V podstatě stejný jak **`/sessioninfo`**. Normálně nedostupný, posílá se na něj GET request s parametrem `"_"`, který má hodnotu UNIX timestampy uživatele a který je opět k ničemu a opět endpoint funguje i bez toho. Mění se akorát "funkčnost", která ale není vidět - prodluží session (zpátky) na maximální životnost. Nevrací se nic.
+## **/Collaboration/OnlineMeeting/MeetingsOverview**
+#### Klíč: `meetings`
+```diff
+- DODĚLAT :)
+```
+## **/Collaboration/OnlineMeeting/Detail**
+#### Klíč: `meetings_info`
+```diff
+- DODĚLAT :)
+```
