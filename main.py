@@ -30,6 +30,12 @@ parser.add_argument(
     action="store_true",
     help="Interaktivní - Vyžaduje interakci po zobrazení zprávy/známky/..."
 )
+parser.add_argument(
+    "-s", "--shell",
+    default=False,
+    action="store_true",
+    help="Spusť BakalariAPI shell (velmi se doporučuje skombinovat s '--interactive')"
+)
 # parser.add_argument(
 #     "-t", "--test",
 #     default=False,
@@ -48,6 +54,7 @@ url = args.url
 user = args.jmeno
 password = args.heslo
 interactive = args.interactive
+shell = args.shell
 
 
 def cls():
@@ -132,7 +139,7 @@ def Login():
         print("Neplatné URL schéma; Končím")
         exit(1)
     print(f"Kontrola stavu serveru/webu... ({url})")
-    if not API.server.Running():
+    if not API.Server.Running():
         print("Severver/web (pravděpodobně) neběží; Končím")
         exit(1)
     print("Sever/web běží")
@@ -143,6 +150,20 @@ def Login():
         print("Nepovedlo se přihlásit (nesprávné přihlašovací údaje)")
         exit(1)
     print("Přihlášení úspěšné")
+
+    print("Nastavuji...")
+    API.Init()
+    print("Nastaveno")
+    print(
+        "Základní informace:\n"
+        f"  Typ uživatele: {API.UserType}\n"
+        f"  Uživatelký hash: {API.UserHash}\n"
+        f"  Verze Bakalářů: {API.Server.Version}\n"
+        f"  Datum verze Bakalářů: {API.Server.VersionDate.strftime('%d. %m. %Y')}\n"
+        f"  Evidenční číslo verze Bakalářů: {API.Server.RegistrationNumber}\n"
+    )
+    if interactive:
+        input("Pro pokračování stiskni klávasu...")
 def Komens():
     print("Získávám IDčka zpráv...")
     zpravyIDs = API.GetKomensIDs()
@@ -218,7 +239,7 @@ def Konec():
     API.Logout()
 
 Login()
-if interactive:
+if shell:
     Shell()
 
 Komens()

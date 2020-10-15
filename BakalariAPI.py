@@ -11,6 +11,8 @@ from bs4 import BeautifulSoup           # Install
 import Exceptions
 
 
+LAST_SUPPORTED_VERSION = "1.34.1006.1"
+
 
 Endpoints = {
     "login":            "/login",
@@ -24,7 +26,8 @@ Endpoints = {
     "session_info":     "/sessioninfo",
     "session_extend":   "/sessionextend",
     "meetings":         "/Collaboration/OnlineMeeting/MeetingsOverview",
-    "meetings_info":    "/Collaboration/OnlineMeeting/Detail"
+    "meetings_info":    "/Collaboration/OnlineMeeting/Detail/",
+    "user_info":        "/next/osobni_udaje.aspx"
 }
 
 
@@ -95,7 +98,10 @@ class Server:
         if (not IsHTTPScheme(url)):
             raise Exceptions.InputException
         self.Url: str = url
-    
+        self.Version: str = None
+        self.VersionDate: datetime = None
+        self.RegistrationNumber: int = None
+
     def Running(self) -> bool:
         try:
             response = requests.get(self.Url)
@@ -168,7 +174,7 @@ class Komens:
 
 class Grade:
     """Třída/objekt držící informace o Známkách/Klasifikaci"""
-    def __init__(self, ID: str, subject: str, grade: str, weight: int, name: str, note1: str, note2: str, date1: str, date2: str, orderInClass: str, type: str, new: bool):
+    def __init__(self, ID: str, subject: str, grade: str, weight: int, name: str, note1: str, note2: str, date1: datetime, date2: datetime, orderInClass: str, type: str):
         self.ID: str = ID
         self.Subject: str = subject
         self.Grade: str = grade
@@ -176,13 +182,13 @@ class Grade:
         self.Name: str = name
         self.Note1: str = note1
         self.Note2: str = note2
-        self.Date1: datetime = datetime.strptime(date1, "%d.%m.%Y") #TODO: Parse it outside
-        self.Date2: datetime = datetime.strptime(date2, "%d.%m.%Y") #TODO: Parse it outside
+        self.Date1: datetime = date1
+        self.Date2: datetime = date2
         self.Order: str = orderInClass
         self.Type: str = type
-        self.New: bool = new #TODO: Remove this?
+        #self.Target: str = target
     def __eq__(self, other: Grade):
-        return self.ID == other.ID
+        return self.ID == other.ID # and self.Target == other.Target # Momentálně se cuttuje support pro ostatní typy účtů než je student a #todo: Přidat target a předělat __eq__ u všech 
     def Format(self):
         return (
             f"ID: {self.ID}\n"
@@ -224,8 +230,6 @@ class Meeting:
             f"{GetText(BeautifulSoup(self.Content, 'html.parser'))}"
         )
 
-
-
 """
 Pokud najdu JSON i učitelů, tak mergnu do class Osoba ze které budou derivovat studen a učitel/personál
 """
@@ -244,51 +248,73 @@ class Student:
 
 class BakalariAPI:
     """Třída/objekt který obsluhuje ostatní komponenty"""
-    Students: list[Student] = []
-    #TODO: Ukládat výsledky všeho pokud "self.loot"
+    Grades: dict[str, Grade] = {}
+    Komens: dict[str, Komens] = {}
+    KomensFiles: dict[str, KomensFile] = {}
+    Students: dict[str, Student] = {}
+    Meetings: dict[str, Meeting] = {}
 
     def __init__(self, server: Server, user: str, password: str, login: bool = True, loot: bool = True):
-        self.server: Server = server
-        self.user: str = user
-        self.password: str = password
-        self.session: requests.Session = requests.Session()
-        self.loot: bool = loot
+        self.Server: Server = server
+        self.User: str = user
+        self.Password: str = password
+        self.Session: requests.Session = requests.Session()
+        self.Loot: bool = loot
+        self.UserType: str = None
+        self.UserHash: str = None
         if login:
             self.Login()
 
+    def Init(self):
+        try:
+            soup = BeautifulSoup(self.Session.get(self.Server.GetEndpoint("user_info")).content, "html.parser")
+        except requests.exceptions.RequestException as e:
+            raise Exceptions.ConnectionException from e
+        data = json.loads(soup.head["data-pageinfo"])
+        self.UserType = data["userType"]
+        self.UserHash = data["userHash"]
+        self.Server.Version = data["applicationVersion"]
+        # if data["applicationVersion"] != LAST_SUPPORTED_VERSION:
+        #     warnings.warn("Server runs diffentt version than we support", Exceptions.DifferentVersion)
+        self.Server.VersionDate = datetime.strptime(data["appVersion"], "%Y%m%d")
+        self.Server.RegistrationNumber = int(data["evidNumber"])
+        
     def Login(self, init: bool = True):
         #TODO: Retry login X times
         try:
-            self.session = requests.Session()
-            response = self.session.post(self.server.GetEndpoint("login"), {
-                "username": self.user,
-                "password": self.password
+            self.Session = requests.Session()
+            response = self.Session.post(self.Server.GetEndpoint("login"), {
+                "username": self.User,
+                "password": self.Password
             })
         except requests.exceptions.RequestException as e:
             raise Exceptions.ConnectionException from e
-        if response.url == self.server.GetEndpoint("login"):
+        if response.url == self.Server.GetEndpoint("login"):
             raise Exceptions.AuthenticationException
-        if not response.url.endswith(self.server.GetEndpoint("dashboard")):
+        if not response.url.endswith(self.Server.GetEndpoint("dashboard")):
             warnings.warn(f"Unexpected redirect on '{response.url}'", Exceptions.UnexpectedBehaviour)
         if init:
-            pass
+            self.Init()
     def Logout(self):
         try:
-            self.session.get(self.server.GetEndpoint("login") + "?s=-1")
+            self.Session.get(self.Server.GetEndpoint("login") + "?s=-1")
         except requests.exceptions.RequestException as e:
             raise Exceptions.ConnectionException from e
         else:
-            self.session = requests.Session()
+            self.Session = requests.Session()
     def Extend(self):
         try:
-            self.session.get(self.server.GetEndpoint("session_extend"))
+            self.Session.get(self.Server.GetEndpoint("session_extend"))
         except requests.exceptions.RequestException as e:
             raise Exceptions.ConnectionException from e
 
 
     def GetGrades(self, fromData: datetime = None) -> list[Grade]:
         output = []
-        response = self.session.get(self.server.GetEndpoint("grades") + ("" if fromData == None else f"?dfrom={fromData.strftime('%Y%m%d')}0000&subt=obdobi"))
+        try:
+            response = self.Session.get(self.Server.GetEndpoint("grades") + ("" if fromData == None else f"?dfrom={fromData.strftime('%Y%m%d')}0000&subt=obdobi"))
+        except requests.exceptions.RequestException as e:
+            raise Exceptions.ConnectionException from e
         soup = BeautifulSoup(response.content, "html.parser")
         znamkyList = soup.find(id="cphmain_DivBySubject")("div", attrs={"data-clasif": True})
         for znamka in znamkyList:
@@ -301,26 +327,31 @@ class BakalariAPI:
                 data["caption"],
                 data["poznamkakzobrazeni"],
                 data["MarkTooltip"] if data["MarkTooltip"] != None else "",
-                data["strdatum"],
-                data["udel_datum"],
+                datetime.strptime(data["strdatum"], "%d.%m.%Y"),
+                datetime.strptime(data["udel_datum"], "%d.%m.%Y"),
                 data["strporadivetrideuplne"],
-                data["typ"],
-                data["IsNew"]
+                data["typ"]
             ))
+        if self.Loot:
+            for item in output:
+                BakalariAPI.Grades[item.ID] = item
         return output
     def GetAllGrades(self) -> list[Grade]:
         return self.GetGrades(datetime(1, 1, 1))
 
     def GetKomensIDs(self, fromDate: datetime = None, toDate: datetime = None) -> list[str]:
         output = []
-        target = self.server.GetEndpoint("komens")
+        target = self.Server.GetEndpoint("komens")
         if fromDate != None or toDate != None:
             target += "?s=custom"
             if fromDate != None:
                 target += "&from=" + fromDate.strftime("%d%m%Y")
             if toDate != None:
                 target += "&to=" + toDate.strftime("%d%m%Y")
-        response = self.session.get(target)
+        try:
+            response = self.Session.get(target)
+        except requests.exceptions.RequestException as e:
+            raise Exceptions.ConnectionException from e
         soup = BeautifulSoup(response.content, "html.parser")
         komensList = soup.find(id="message_list_content").find("ul").find_all("li", recursive=False)
         for komens in komensList:
@@ -330,14 +361,17 @@ class BakalariAPI:
         return self.GetKomensIDs(datetime(1953, 1, 1), datetime.today() + timedelta(1))
 
     def GetKomens(self, ID: str, context: str = "prijate") -> Komens:
-        response = self.session.post(self.server.GetEndpoint("komens_get"), json={
-            "idmsg": ID,
-            "context": context
-        }).json()
+        try:
+            response = self.Session.post(self.Server.GetEndpoint("komens_get"), json={
+                "idmsg": ID,
+                "context": context
+            }).json()
+        except requests.exceptions.RequestException as e:
+            raise Exceptions.ConnectionException from e
         soubory = []
         if len(response["Files"]) != 0:
             for soubor in response["Files"]:
-                soubory.append(KomensFile(
+                komensFile = KomensFile(
                     soubor["id"],
                     soubor["name"],
                     soubor["Size"],
@@ -345,10 +379,14 @@ class BakalariAPI:
                     soubor["idmsg"],
                     soubor["path"],
                     self
-                ))
+                )
+                soubory.append(komensFile)
                 if soubor["idmsg"] != ID:
                     warnings.warn(f"ID zprávy se neschoduje s ID zprávy referencované v souboru; ID zprávy: {ID}, ID v souboru: {soubor['idmsg']}", Exceptions.UnexpectedBehaviour)
-        return Komens(
+            if self.Loot:
+                for item in soubory:
+                    BakalariAPI.KomensFiles[item.ID] = item
+        komens = Komens(
             ID,
             response["Jmeno"],
             response["MessageText"],
@@ -360,10 +398,17 @@ class BakalariAPI:
             soubory,
             self
         )
+        if self.Loot:
+            BakalariAPI.Komens[komens.ID] = komens
+        return komens
 
+    #TODO: Filtr MettingsIDs ((všechny/aktivní) | (od, do) | ...)
     def GetMettingsIDs(self) -> list[str]:
         output = []
-        response = self.session.get(self.server.GetEndpoint("meetings"))
+        try:
+            response = self.Session.get(self.Server.GetEndpoint("meetings"))
+        except requests.exceptions.RequestException as e:
+            raise Exceptions.ConnectionException from e
         soup = BeautifulSoup(response.content, "html.parser")
         scritps = soup.head("script")
         for script in scritps:
@@ -381,23 +426,25 @@ class BakalariAPI:
                 meetingsJSON = json.loads(line.strip()[len("var meetingsData = "):-1])
                 for meeting in meetingsJSON:
                     output.append(str(meeting["Id"])) # Actually je to číslo, ale všechny ostaní IDčka jsou string, takže se budeme tvářit že je string i tohle...
-            elif self.loot and line.startswith("model.Students = ko.mapping.fromJS("):
+            elif self.Loot and line.startswith("model.Students = ko.mapping.fromJS("):
                 loot["Students"] = True
                 studentsJSON = json.loads(line.strip()[len("model.Students = ko.mapping.fromJS("):-2])
                 for student in studentsJSON:
-                    BakalariAPI.Students.append(Student(
+                    BakalariAPI.Students[student["Id"]] = Student(
                         student["Id"],
                         student["Name"],
                         student["Surname"],
                         student["Class"]
-                    ))
-            if loot["Meetings"] and (not self.loot or loot["Students"]):
+                    )
+            if loot["Meetings"] and (not self.Loot or loot["Students"]):
                 break
         return output
-    #TODO: Filtr MettingsIDs ((všechny/aktivní) | (od, do) | ...)
     def GetMeeting(self, ID: str) -> Meeting:
-        response = self.session.get(self.server.GetEndpoint("meetings_info") + "/" + ID).json()
-        return Meeting(
+        try:
+            response = self.Session.get(self.Server.GetEndpoint("meetings_info") + ID).json()
+        except requests.exceptions.RequestException as e:
+            raise Exceptions.ConnectionException from e
+        meeting = Meeting(
             response["data"]["Id"],
             response["data"]["OwnerId"],
             response["data"]["Title"],
@@ -408,3 +455,6 @@ class BakalariAPI:
             [(s["PersonId"], s["PersonName"]) for s in response["data"]["Participants"]],
             [(s["PersonId"], datetime.strptime(s["Readed"][:-(len(s["Readed"]) - s["Readed"].rfind("."))], "%Y-%m-%dT%H:%M:%S")) for s in response["data"]["ParticipantsListOfRead"]]
         )
+        if self.Loot:
+            BakalariAPI.Meetings[meeting.ID] = meeting
+        return meeting

@@ -23,3 +23,6 @@ class Warning(UserWarning):
 
 class UnexpectedBehaviour(Warning):
     """Nečekaná odpoveď/přesměrování od serveru (pravděpodobně na serveru běží jiná (nová) veze Bakalařů)"""
+
+class DifferentVersion(Warning):
+    """Bakaláři mají jinou verzi, než BakalariAPI podporuje"""
