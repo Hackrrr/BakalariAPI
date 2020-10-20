@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone # Here it comes... Timezone h
 # s časovými pásmy řešit furt :) Takže nevadí, že si to pořád ještě po 10h debugu nespravil...
 # HA! Dělám si srandu. Padej to opravit! S láskou - Tvoje minulé já :)
 import webbrowser
+import time
 
 parser = argparse.ArgumentParser(
     description="Rádoby 'API' pro Bakaláře",
@@ -101,11 +102,16 @@ def Shell():
             inpt = input()
             if len(inpt) == 0:
                 continue
-            if "help".startswith(inpt.lower()):
+            if "help".startswith(inpt.lower()) or inpt == "?":
                 print("%-15s %s" % ("komens",   "Zobrazuje komens zprávy"))
                 print("%-15s %s" % ("schuzky",  "Zobrazuje online schůzky"))
                 print("%-15s %s" % ("studenti", "Zobrazuje studenty"))
                 print("%-15s %s" % ("znamky",   "Zobrazuje známky"))
+                print("%-15s %s" % ("help",     "Zobrazuje (tuto) nápovědu"))
+                print("%-15s %s" % ("?",        "Zobrazuje (tuto) nápovědu"))
+                print("%-15s %s" % ("exit",     "Ukončí aplikaci"))
+                print("%-15s %s" % ("konec",    "Ukončí aplikaci"))
+                print("%-15s %s" % ("testX",    "Spustí testovací snippet s číslem X"))
             elif "komens".startswith(inpt.lower()):
                 Komens()
             elif "schuzky".startswith(inpt.lower()):
@@ -114,6 +120,11 @@ def Shell():
                 Studenti()
             elif "znamky".startswith(inpt.lower()):
                 Znamky()
+            elif "exit".startswith(inpt.lower()) or "help".startswith(inpt.lower()):
+                Konec()
+                exit(0)
+            elif "test".startswith(inpt[:-1].lower()):
+                getattr(__import__(__name__), f"Test{inpt[-1]}")()
             else:
                 try:
                     exec(f"print({inpt})")
@@ -222,21 +233,61 @@ def Schuzky():
             input("Pro pokračování stiskni klávasu...")
             cls()
 def Studenti():
-    if interactive and len(API.Students) and AnoNeDialog("Podařilo získat seznam studentů. Chcete jej zobrazit? "):
+    if interactive and len(BakalariAPI.Looting.Data["Student"]) and AnoNeDialog("Podařilo získat seznam studentů. Chcete jej zobrazit? "):
         count = InputCislo("Kolik výsledků najednou? (Výchozí 25) ", 25)
         offset = 0
-        length = len(API.Students)
+        length = len(BakalariAPI.Looting.Data["Student"])
         cls()
         while offset < length:
             for _ in range(count):
                 if (offset >= length):
                     break
-                print(API.Students[offset].Format())
+                print(BakalariAPI.Looting.Data["Student"][offset].Format())
                 offset += 1
             input(f"Pro pokračování stiskni klávasu... (Již zobrazeno {offset} výsledků z {length})")
             cls()
 def Konec():
     API.Logout()
+
+def Test0():
+    print("Spouštím testování...")
+    while True:
+        last = API.Session.get(API.Server.GetEndpoint("session_info")).json()["data"]["remainingTime"]
+        print("\r", end="")
+        while True:
+            print("Současný zbývající čas: " + str(last) + "                       ", end="\r") #Some spaces to rewrite previous text...
+            API.Session.get(API.Server.GetEndpoint("session_extend"))
+            current = float(API.Session.get(API.Server.GetEndpoint("session_info")).json()["data"]["remainingTime"])
+            if last < current:
+                break
+            last = current
+            time.sleep(1)
+        print("Sezení bylo prodlouženo, když zbývalo " + str(last) + " (+ max 1s) do konce a bylo prodlouženo na " + str(current))
+def Test1():
+    schuzkyIDs = API.GetMettingsIDs()
+    print("IDčka online schůzek získany")
+    for ID in schuzkyIDs:
+        print(f"Získávám online chůzku {ID}")
+        API.GetMeeting(ID)
+    originalStudentLen = len(BakalariAPI.Looting.Data["Student"])
+    randomStudentIndex = 10 # Ano, náhodný... Extrémně se mi nechce ještě teď po zprovoznění deseralizace lootingu něco hledat...
+    randomStudentOriginalName = BakalariAPI.Looting.Data["Student"][randomStudentIndex].Name + " " + BakalariAPI.Looting.Data["Student"][randomStudentIndex].Surname
+    string = BakalariAPI.Looting.ToJSON()
+
+    BakalariAPI.Looting.Data = {}
+    BakalariAPI.Looting.IDs = {}
+
+    BakalariAPI.Looting.FromJSON(string)
+    currentStudentLen = len(BakalariAPI.Looting.Data["Student"])
+    randomStudentCurrentName = BakalariAPI.Looting.Data["Student"][randomStudentIndex].Name + " " + BakalariAPI.Looting.Data["Student"][randomStudentIndex].Surname
+    if currentStudentLen == originalStudentLen:
+        print(f"Počet studentů je shodný ({originalStudentLen})")
+    else:
+        print(f"Počet studentů se liší ({originalStudentLen}; {currentStudentLen})")
+    if randomStudentOriginalName == randomStudentCurrentName:
+        print(f"Jméno náhodného studenta je stejný ({randomStudentOriginalName})")
+    else:
+        print(f"Jméno náhodného studenta se liší ({randomStudentOriginalName}; {randomStudentCurrentName})")
 
 Login()
 if shell:

@@ -26,3 +26,7 @@ class UnexpectedBehaviour(Warning):
 
 class DifferentVersion(Warning):
     """Bakaláři mají jinou verzi, než BakalariAPI podporuje"""
+
+class SameID(Warning):
+    """Nalezeny objekty, které mají stejné ID ale nejsou totožný
+    Pozn.: Mohou být i totžný, ale """

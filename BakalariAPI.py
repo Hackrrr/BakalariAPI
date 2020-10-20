@@ -2,11 +2,12 @@
 from __future__ import annotations
 import warnings
 from datetime import datetime, timedelta
+from abc import ABC, abstractmethod
 import json
 import re
+import inspect
 import requests                         # Install
 from bs4 import BeautifulSoup           # Install
-# Not yet... Install html5lib
 
 import Exceptions
 
@@ -29,6 +30,17 @@ Endpoints = {
     "meetings_info":    "/Collaboration/OnlineMeeting/Detail/",
     "user_info":        "/next/osobni_udaje.aspx"
 }
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -77,19 +89,21 @@ def GetText(soup: BeautifulSoup) -> str:
         soup = body
     
     return soup.get_text().strip()
-
-# Odstraněno... soup.get_text() dělá "potřebné" bezpečněji... (prostě místo tohohle volej na soupu .get_text() :) )
-# def RemoveMicrosoftTeamsFooter(text: str, quiet: bool = False) -> str:
-#     """Stripne Miscrosoft Teams footer; Viz poznámky dál
-#     Tahle funkce hrubě tipuje... Provádí se ověření jen vůči jednomu divu a odsekne se vše dál
-#     Takže použít jen v případech, kdy na 100% je jistý, že tam ten footer je
-#     """
-#     positions = FindAll(text, '<div style="width:100%; height:20px"><span style="white-space:nowrap; color:gray; opacity:.36">________________________________________________________________________________</span>', False)
-#     if len(positions) < 2:
-#         if not quiet:
-#             warnings.warn("It seems that there is no footer to remove", Exceptions.UnexpectedBehaviour)
-#         return text
-#     return text[:positions[len(positions) - 2]]
+def Fist2Upper(string: str) -> str:
+    return string[0].upper() + string[1:]
+def String2Datetime(string: str) -> datetime:
+    formats = [
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M:%S%z",
+        "%Y-%m-%d %H:%M:%ST%z",
+        "%Y-%m-%d"
+    ]
+    for format in formats:
+        try:
+            return datetime.strptime(string, format)
+        except ValueError:
+            pass
+    raise ValueError
 
 
 class Server:
@@ -114,10 +128,19 @@ class Server:
     def GetEndpoint(self, endpoint: str) -> str:
         return self.Url + Endpoints[endpoint]
 
-class KomensFile:
+class BakalariObject(ABC):
+    def __init__(self, ID: str):
+        self.ID = ID
+    
+    @abstractmethod
+    def Format(self) -> str:
+        pass
+    
+
+class KomensFile(BakalariObject):
     """Třída/objekt držící informace o Komens souboru/příloze na Bakalařích"""
     def __init__(self, ID: str, name: str, size: int, type: str, komensID: str, path: str, instance: BakalariAPI = None):
-        self.ID: str = ID
+        super(KomensFile, self).__init__(ID)
         self.Name: str = name
         self.Size: int = size
         self.Type: str = type
@@ -135,12 +158,20 @@ class KomensFile:
     def Download(self) -> bytes:
         """Stáhne daný soubor a vrátí ho jakožto (typ) byty (Doporučuje se ale použít metoda '.DownloadStream()', jelikož se zde soubor ukládá do paměti a ne na disk)"""
         return self.Instance.session.get(self.GenerateURL()).content
+    def Format(self) -> str:
+        return (
+            f"ID: {self.ID}\n"
+            f"Název souboru: {self.Name}\n"
+            f"Typ: {self.Type}\n"
+            f"Velikost: {self.Size}\n"
+            f"ID přidružené zprávy: {self.KomensID}\n"
+            f"(Nepoužitelná) Cesta: {self.Path}\n"
+        )
 
-class Komens:
+class Komens(BakalariObject):
     """Třída/objekt držící informace o Komens (zprávě/zprách)"""
-    # Od, Zpráva, kdy, potvrdit, byla potvrzena?, "typ"
     def __init__(self, ID: str, sender: str, content: str, time: str, confirm: bool, confirmed: bool, type: str, readed: bool, files: list[KomensFile] = None, instance: BakalariAPI = None):
-        self.ID: str = ID
+        super(Komens, self).__init__(ID)
         self.Sender: str = sender
         self.Content: str = content
         self.Time: datetime = datetime.strptime(time, "%d.%m.%Y %H:%M") #TODO: Parse it outside
@@ -172,10 +203,10 @@ class Komens:
             f"{GetText(BeautifulSoup(self.Content, 'html.parser'))}" #.get_text().strip()
         )
 
-class Grade:
+class Grade(BakalariObject):
     """Třída/objekt držící informace o Známkách/Klasifikaci"""
     def __init__(self, ID: str, subject: str, grade: str, weight: int, name: str, note1: str, note2: str, date1: datetime, date2: datetime, orderInClass: str, type: str):
-        self.ID: str = ID
+        super(Grade, self).__init__(ID)
         self.Subject: str = subject
         self.Grade: str = grade
         self.Weight: int = weight
@@ -201,10 +232,10 @@ class Grade:
             f"Poznámka 2: {self.Note2.strip()}"
         )
 
-class Meeting:
+class Meeting(BakalariObject):
     """Třída/objekt držící informace o Známkách/Klasifikaci"""                                                                                                                          # ID + time
     def __init__(self, ID: str, ownerID: str, name: str, content: str, startTime: datetime, endTime: datetime, joinURL: str, participants: list[tuple[str, str]], participantsReadInfo: list[tuple[str, datetime]]):
-        self.ID: str = ID
+        super(Meeting, self).__init__(ID)
         self.OwnerID: str = ownerID
         self.Name: str = name
         self.Content: str = content
@@ -230,13 +261,10 @@ class Meeting:
             f"{GetText(BeautifulSoup(self.Content, 'html.parser'))}"
         )
 
-"""
-Pokud najdu JSON i učitelů, tak mergnu do class Osoba ze které budou derivovat studen a učitel/personál
-"""
-class Student:
+class Student(BakalariObject):
     """Třída/objekt držící informace o studentovy"""
     def __init__(self, ID: str, name: str, surname: str, _class: str):
-        self.ID: str = ID
+        super(Student, self).__init__(ID)
         self.Name: str = name
         self.Surname: str = surname
         self.Class: str = _class
@@ -246,20 +274,16 @@ class Student:
         return f"{self.ID}: {self.Name} {self.Surname} ({self.Class})"
 
 
+
 class BakalariAPI:
     """Třída/objekt který obsluhuje ostatní komponenty"""
-    Grades: dict[str, Grade] = {}
-    Komens: dict[str, Komens] = {}
-    KomensFiles: dict[str, KomensFile] = {}
-    Students: dict[str, Student] = {}
-    Meetings: dict[str, Meeting] = {}
 
-    def __init__(self, server: Server, user: str, password: str, login: bool = True, loot: bool = True):
+    def __init__(self, server: Server, user: str, password: str, login: bool = True, looting: bool = True):
         self.Server: Server = server
         self.User: str = user
         self.Password: str = password
         self.Session: requests.Session = requests.Session()
-        self.Loot: bool = loot
+        self.Looting: bool = looting
         self.UserType: str = None
         self.UserHash: str = None
         if login:
@@ -278,7 +302,7 @@ class BakalariAPI:
         #     warnings.warn("Server runs diffentt version than we support", Exceptions.DifferentVersion)
         self.Server.VersionDate = datetime.strptime(data["appVersion"], "%Y%m%d")
         self.Server.RegistrationNumber = int(data["evidNumber"])
-        
+    
     def Login(self, init: bool = True):
         #TODO: Retry login X times
         try:
@@ -308,6 +332,8 @@ class BakalariAPI:
         except requests.exceptions.RequestException as e:
             raise Exceptions.ConnectionException from e
 
+    def Save(self):
+        pass
 
     def GetGrades(self, fromData: datetime = None) -> list[Grade]:
         output = []
@@ -332,9 +358,9 @@ class BakalariAPI:
                 data["strporadivetrideuplne"],
                 data["typ"]
             ))
-        if self.Loot:
+        if self.Looting:
             for item in output:
-                BakalariAPI.Grades[item.ID] = item
+                Looting.AddLoot(item)
         return output
     def GetAllGrades(self) -> list[Grade]:
         return self.GetGrades(datetime(1, 1, 1))
@@ -383,9 +409,9 @@ class BakalariAPI:
                 soubory.append(komensFile)
                 if soubor["idmsg"] != ID:
                     warnings.warn(f"ID zprávy se neschoduje s ID zprávy referencované v souboru; ID zprávy: {ID}, ID v souboru: {soubor['idmsg']}", Exceptions.UnexpectedBehaviour)
-            if self.Loot:
+            if self.Looting:
                 for item in soubory:
-                    BakalariAPI.KomensFiles[item.ID] = item
+                    Looting.AddLoot(item)
         komens = Komens(
             ID,
             response["Jmeno"],
@@ -398,8 +424,8 @@ class BakalariAPI:
             soubory,
             self
         )
-        if self.Loot:
-            BakalariAPI.Komens[komens.ID] = komens
+        if self.Looting:
+            Looting.AddLoot(komens)
         return komens
 
     #TODO: Filtr MettingsIDs ((všechny/aktivní) | (od, do) | ...)
@@ -426,17 +452,17 @@ class BakalariAPI:
                 meetingsJSON = json.loads(line.strip()[len("var meetingsData = "):-1])
                 for meeting in meetingsJSON:
                     output.append(str(meeting["Id"])) # Actually je to číslo, ale všechny ostaní IDčka jsou string, takže se budeme tvářit že je string i tohle...
-            elif self.Loot and line.startswith("model.Students = ko.mapping.fromJS("):
+            elif self.Looting and line.startswith("model.Students = ko.mapping.fromJS("):
                 loot["Students"] = True
                 studentsJSON = json.loads(line.strip()[len("model.Students = ko.mapping.fromJS("):-2])
                 for student in studentsJSON:
-                    BakalariAPI.Students[student["Id"]] = Student(
+                    Looting.AddLoot(Student(
                         student["Id"],
                         student["Name"],
                         student["Surname"],
                         student["Class"]
-                    )
-            if loot["Meetings"] and (not self.Loot or loot["Students"]):
+                    ))
+            if loot["Meetings"] and (not self.Looting or loot["Students"]):
                 break
         return output
     def GetMeeting(self, ID: str) -> Meeting:
@@ -455,6 +481,98 @@ class BakalariAPI:
             [(s["PersonId"], s["PersonName"]) for s in response["data"]["Participants"]],
             [(s["PersonId"], datetime.strptime(s["Readed"][:-(len(s["Readed"]) - s["Readed"].rfind("."))], "%Y-%m-%dT%H:%M:%S")) for s in response["data"]["ParticipantsListOfRead"]]
         )
-        if self.Loot:
-            BakalariAPI.Meetings[meeting.ID] = meeting
+        if self.Looting:
+            Looting.AddLoot(meeting)
         return meeting
+
+
+
+class Looting:
+    Data: dict[str, BakalariObject] = {}
+    IDs: dict[str, BakalariObject] = {}
+
+    class JSONSerializer(json.JSONEncoder):
+        def default(self, object):
+            if isinstance(object, datetime):
+                return {
+                    "_type":   "datetime",
+                    "value":    str(object)
+                }
+            if isinstance(object, BakalariObject):
+                output = dict(object.__dict__)
+                output["_type"] = type(object).__name__
+                if "Instance" in output:
+                    del output["Instance"]
+                return output
+            
+            #raise TypeError()
+
+    @staticmethod
+    def AddLoot(object: BakalariObject, skipCheck: bool = False) -> bool:
+        """Adds object to loot if it's ID is not already there; Returns True when object is added, False otherwise"""
+
+        # if isinstance(object, KomensFile):
+        #     pass
+        # elif isinstance(object, Komens):
+        #     pass
+        # elif isinstance(object, Grade):
+        #     pass
+        # elif isinstance(object, Meeting):
+        #     pass
+        # elif isinstance(object, Student):
+        #     pass
+
+        if not skipCheck and object.ID in Looting.IDs:
+            return False
+        Looting.Data.setdefault(type(object).__name__, [])
+        Looting.Data[type(object).__name__].append(object)
+        Looting.IDs[object.ID] = object
+        return True
+
+    @staticmethod
+    def ToJSON(byIDs: bool = False, ensure_ascii: bool = False):
+        return Looting.JSONSerializer(ensure_ascii = ensure_ascii).encode(Looting.IDs if byIDs else Looting.Data)
+
+    @staticmethod
+    def FromJSON(jsonString: str, skipCheck: bool = False):
+        parsed = json.loads(jsonString)
+        module = __import__(__name__)
+
+        # for key, arr in parsed.items():
+        #     if not hasattr(module, key):
+        #         raise TypeError("Unknown type to load; Type: " + key)
+        #     class_constructor = getattr(module, key)
+        #     signature = inspect.signature(class_constructor)
+        #     for values in arr:
+        #         supply_list = []
+        #         for param in signature.parameters:
+        #             param = Fist2Upper(param.lstrip("_"))
+        #             if param in values:
+        #                 supply_list.append(values[param])
+        #         print(class_constructor(*supply_list).Format())
+        
+        def Recursion(data) -> object:
+            for index, value in (enumerate(data) if isinstance(data, list) else data.items()):
+                #print(f"Enumerating index '{index}', value: {value}")
+                if isinstance(value, list) or isinstance(value, dict):
+                    data[index] = Recursion(value)
+            if isinstance(data, dict) and "_type" in data:
+                if data["_type"] == "datetime":
+                    data = String2Datetime(data["value"])
+                else:
+                    if not hasattr(module, data["_type"]):
+                        raise TypeError("Unknown type to load; Type: " + data["_type"])
+                    class_constructor = getattr(module, data["_type"])
+                    #del data["_type"] # Není potřeba, protože do costructoru vybíráme jen to co potřebujem (a ne všechno co máme)
+                    signature = inspect.signature(class_constructor)
+                    supply_list = []
+                    for param in signature.parameters:
+                        param = Fist2Upper(param.lstrip("_"))
+                        if param in data:
+                            supply_list.append(data[param])
+                    data = class_constructor(*supply_list)
+                    #print("Adding new object to Loot (" + class_constructor.__name__ + ")")
+                    Looting.AddLoot(data, skipCheck)
+            return data
+        parsed = Recursion(parsed)
+
