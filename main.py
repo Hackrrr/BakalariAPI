@@ -173,6 +173,8 @@ def Login():
         f"  Datum verze Bakalářů: {API.Server.VersionDate.strftime('%d. %m. %Y')}\n"
         f"  Evidenční číslo verze Bakalářů: {API.Server.RegistrationNumber}\n"
     )
+    if API.Server.Version != BakalariAPI.LAST_SUPPORTED_VERSION:
+        print("*** Jiná verze Bakalářů! Všechny funkce nemusejí fungovat správně! ***")
     if interactive:
         input("Pro pokračování stiskni klávasu...")
 def Komens():
@@ -212,13 +214,14 @@ def Znamky():
             input("Pro pokračování stiskni klávasu...")
             cls()
 def Schuzky():
-    schuzkyIDs = API.GetMettingsIDs()
+    print("Získávám IDčka online schůzek")
+    schuzkyIDs = API.GetMeetingsIDs()
     print("IDčka online schůzek získany")
     schuzky = []
     for ID in schuzkyIDs:
-        print(f"Získávám online chůzku {ID}")
+        print(f"Získávám online schůzku {ID}")
         schuzky.append(API.GetMeeting(ID))
-    print("Zprávy získány, zobrazuji...")
+    print("Online schůzky získány, zobrazuji...")
     if interactive:
         cls()
     for schuzka in schuzky:
@@ -264,30 +267,41 @@ def Test0():
             time.sleep(1)
         print("Sezení bylo prodlouženo, když zbývalo " + str(last) + " (+ max 1s) do konce a bylo prodlouženo na " + str(current))
 def Test1():
-    schuzkyIDs = API.GetMettingsIDs()
-    print("IDčka online schůzek získany")
-    for ID in schuzkyIDs:
-        print(f"Získávám online chůzku {ID}")
-        API.GetMeeting(ID)
-    originalStudentLen = len(BakalariAPI.Looting.Data["Student"])
-    randomStudentIndex = 10 # Ano, náhodný... Extrémně se mi nechce ještě teď po zprovoznění deseralizace lootingu něco hledat...
-    randomStudentOriginalName = BakalariAPI.Looting.Data["Student"][randomStudentIndex].Name + " " + BakalariAPI.Looting.Data["Student"][randomStudentIndex].Surname
+    # schuzkyIDs = API.GetMeetingsIDs()
+    # print("IDčka online schůzek získany")
+    # for ID in schuzkyIDs:
+    #     print(f"Získávám online chůzku {ID}")
+    #     API.GetMeeting(ID)
+    # originalStudentLen = len(BakalariAPI.Looting.Data["Student"])
+    # randomStudentIndex = 10 # Ano, náhodný... Extrémně se mi nechce ještě teď po zprovoznění deseralizace lootingu něco hledat...
+    # randomStudentOriginalName = BakalariAPI.Looting.Data["Student"][randomStudentIndex].Name + " " + BakalariAPI.Looting.Data["Student"][randomStudentIndex].Surname
     string = BakalariAPI.Looting.ToJSON()
 
     BakalariAPI.Looting.Data = {}
     BakalariAPI.Looting.IDs = {}
 
     BakalariAPI.Looting.FromJSON(string)
-    currentStudentLen = len(BakalariAPI.Looting.Data["Student"])
-    randomStudentCurrentName = BakalariAPI.Looting.Data["Student"][randomStudentIndex].Name + " " + BakalariAPI.Looting.Data["Student"][randomStudentIndex].Surname
-    if currentStudentLen == originalStudentLen:
-        print(f"Počet studentů je shodný ({originalStudentLen})")
-    else:
-        print(f"Počet studentů se liší ({originalStudentLen}; {currentStudentLen})")
-    if randomStudentOriginalName == randomStudentCurrentName:
-        print(f"Jméno náhodného studenta je stejný ({randomStudentOriginalName})")
-    else:
-        print(f"Jméno náhodného studenta se liší ({randomStudentOriginalName}; {randomStudentCurrentName})")
+    # currentStudentLen = len(BakalariAPI.Looting.Data["Student"])
+    # randomStudentCurrentName = BakalariAPI.Looting.Data["Student"][randomStudentIndex].Name + " " + BakalariAPI.Looting.Data["Student"][randomStudentIndex].Surname
+    # if currentStudentLen == originalStudentLen:
+    #     print(f"Počet studentů je shodný ({originalStudentLen})")
+    # else:
+    #     print(f"Počet studentů se liší ({originalStudentLen}; {currentStudentLen})")
+    # if randomStudentOriginalName == randomStudentCurrentName:
+    #     print(f"Jméno náhodného studenta je stejný ({randomStudentOriginalName})")
+    # else:
+    #     print(f"Jméno náhodného studenta se liší ({randomStudentOriginalName}; {randomStudentCurrentName})")
+def Test2():
+    print("Získávám IDčka online schůzek")
+    IDs = API.GetAllMeetingsIDs()
+    print("IDčka online schůzek získany")
+    for ID in IDs:
+        print(f"Získávám online schůzku {ID}")
+        if API.GetMeeting(ID) == None:
+            print(f"Online schůzku {ID} se nepodařilo načíst")
+        else:
+            print(f"Online schůzka {ID} byla načtena")
+
 
 Login()
 if shell:

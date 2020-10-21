@@ -180,6 +180,7 @@ A `<div class="znamky">` obsahuje další `<div>`, které mají jako `id` ID zn�
 }
 ```
 Tenhle JSON je bordel sám o sobě... "Hlavní název" známky je klíč `"caption"`. Další info ke známce je v klíči `"poznamkakzobrazeni"` a také v klíči `"MarkTooltip"`. Klíč `"datum"` je úplně k ničemu a je pořád stejný. Za to klíče `"strdatum"` a `"udel_datum"` oba obsahují (nějaký) datum, který je ve většině případě stejný (ale ne konstantní), ale může se i lišit (normálnímu uživateli se může ale zobrazit pouze klíč `"strdatum"`). Předmět má pak klíč `"nazev"` a hodnota známky má pak klíč `"MarkText"`. Další klíče jsou snad pochopitelné (i když třeba osobně nechápu klíč `"bodymax"`).
+
 ## **/sessioninfo**
 #### Klíč: `session_info`
 Endpoint který je pro normálního uživatele opět nedostupný. Normálně se sem posílá v určitém intervalu (jaký je se nezjistilo a je možný, že je dynamický) GET request s parametrem `"_"`, který má hodnoutu UNIX timestampy klienta. Z testování se má za to, že tato UNIX timestamp je k ničemu a endpoint funguje i bez toho. Vrací se JSON v podobě:
@@ -188,17 +189,227 @@ Endpoint který je pro normálního uživatele opět nedostupný. Normálně se 
 ```
 Pro nás má užitek jen informace o tom, kolik zbývá (`"remainingTime"`) a jak dlouhá je maxiálně sesssion bez prodloužení (`"sessionDuration"`).<br>
 Klient ověřuje, jestli `"remainingTime"` je pod určitou hranicí a popř. zobrazí dialog ve smyslu *"Jste tu? Jestli jo, zmáčkmi tlačítko"*, popř. (pokud `"remainingTime"` je 0) zobrazí dialog *"Jste dlouho offline a proto jsme vás z DŮVODU BEZPEČNOSTI odhlásili. (+ tlačíko)"*.
+
 ## **/sessionextend**
 #### Klíč: `session_extend`
-### **Vyžaduje se přeskoumání - Pravděpodobně funguje jen od určité (prcentuální/zbývající) doby**
-V podstatě stejný jak **`/sessioninfo`**. Normálně nedostupný, posílá se na něj GET request s parametrem `"_"`, který má hodnotu UNIX timestampy uživatele a který je opět k ničemu a opět endpoint funguje i bez toho. Mění se akorát "funkčnost", která ale není vidět - prodluží session (zpátky) na maximální životnost. Nevrací se nic.
+Normálně nedostupný, posílá se na něj GET request s parametrem `"_"`, který má hodnotu UNIX timestampy uživatele a který je opět k ničemu a opět endpoint funguje i bez toho. Pokud na něj pošleme takovýto request, tak prodlouží délku současné session, ale je v případě, kdy už je session za (možná i "v") půlkou své životnosti.<br>
+*Pozn.: Je možný, že je potřeba, aby životnost session byla za/v 450s (= 7,5 minut). Přestože je tato možnost nepravděpodovná, je možná - Bylo testováno jen na serveru, kde délká session je 900s (= 15 minut).*
+
 ## **/Collaboration/OnlineMeeting/MeetingsOverview**
-#### Klíč: `meetings`
-```diff
-- DODĚLAT :)
+#### Klíč: `meetings_overview`
+Normálně zobrazuje přehled nadcházejících online schůzek. Pro nás zdroj IDček schůzek a to hned dvěma způsoby, které dávají rozdílné věci. Já začnu tím "druhým" (druhý znamená, že jsem na něj přišel jako později) protože u prvního máme něco navíc...<br>
+Způsob č. 2 je využítí "API", které na to mají. Uděláme POST request na tento endpoint, který vypadá nějak takto:
+```http
+POST /Collaboration/OnlineMeeting/MeetingsOverview HTTP/1.1
+TimeWindow=FromTo&FilterByAuthor=AllInvitations&MeetingFrom=*DATUM_OD*&MeetingTo=*DATUM_DO*
 ```
-## **/Collaboration/OnlineMeeting/Detail**
+Tento request by zjištěn opět přes odchyt výsledků filtrování a následně vyzkoušeno, které parametry je potřeba a které lze vyhodit. Parametry `TimeWindow` a `FilterByAuthor` přeskočím, protože nebyla nalezena cesta jak je užít nějak jinak - prostě je potřebujeme, abychom "aktivovali" tohle "API" a nevrátilo se nám HTML namísto JSONu. `MeetingFrom` a `MeetingTo` jsou data na filtraci. Originální formát je `%Y-%m-%dT%H:%M:%S%z`, ale údaj se časového pásma se dá postrádat. Minimum je `0001-01-01T00:00:00` (když za rok dosadí "0000", tak se (podle dat z responsu) převede na "0001") a maximum `9999-12-31T23:59:59`. Odpověď je v JSONu a vypadá takto:
+```JSON
+{
+   "success":true,
+   "error":"",
+   "data":{
+      "Meetings":[
+         {
+            "Id":*ID_SCHUZKY*,
+            "MeetingId":null,
+            "MeetingStart":"*START_SCHUZKY*",
+            "MeetingEnd":"0001-01-01T00:00:00",
+            "Title":"Název schůzky",
+            "Details":null,
+            "OwnerId":"*ID_POŘADATELE*",
+            "Error":null,
+            "RecipientTypeCode":null,
+            "RecipientCode":null,
+            "Participants":null,
+            "ParticipantsReadedCount":0,
+            "ParticipantsTotalCount":0,
+            "OwnerName":"Pořadatel/Vlastník schůzky",
+            "ParticipantsListOfRead":null,
+            "ParticipantsListOfDontRead":null,
+            "MeetingStartDate":"0001-01-01T00:00:00",
+            "MeetingStartTime":"0001-01-01T00:00:00",
+            "MeetingEndDate":"0001-01-01T00:00:00",
+            "MeetingEndTime":"0001-01-01T00:00:00",
+            "IsOver":true,
+            "IsOwner":false,
+            "RecipientsDisplayName":"Nějaký přájemce třeba třída A3",
+            "CanEdit":false,
+            "IsInvitationByEmailOrKomens":false,
+            "JoinMeetingUrl":null,
+            "HasExternalChange":false
+         },
+         ...
+      ],
+      "SelectedMeetingId":null,
+      "Filter":{
+         "TimeWindow":"FromTo",
+         "Directorate":false,
+         "Teachers":false,
+         "Parents":false,
+         "OneClassParents":false,
+         "ConcreeteStudentParents":false,
+         "ConcreeteStudentParentsCode":null,
+         "Students":false,
+         "OneClassStudents":false,
+         "ConcreeteStudent":false,
+         "ConcreeteStudentCode":null,
+         "FilterByAuthor":"AllInvitations",
+         "MeetingFrom":"0001-01-01T00:00:00",
+         "MeetingTo":null,
+         "SearchText":null,
+         "DisplayDateFrom":"0001-01-01T00:00:00",
+         "DisplayDateTo":"0001-01-01T00:00:00"
+      },
+      "Students":null,
+      "IsTeacher":false
+   }
+}
+```
+Ano, response je velký... A ano - přes 90% hodnot je neplatných (např. asi tak všechno info o schůzce). Jediné údaje, kterým se dá věřit, tak jsou schůzek `"Id"`, `"MeetingStart"`, `"Title"`, `"OwnerId"` a `"OwnerName"`. Naštěstí chceme tenhle response jen kvůli IDčkům o schůzkám, které můžeme využít u endpointu `/Collaboration/OnlineMeeting/Detail/`.<br>
+Tak to by byl jeden způsob jak získat IDčka schůzek. Druhý způsob je scraping. Sice je to náročnější scrapping, ale taky z toho můžeme získat o dost více informací. Zde totiž musíme scrapnout `<script>` tag. `BakalariAPI` hledá daný `<script>` tag bruteforcem - projde všechny `<script>` tagy v `<head>` tagu a pokud najde v JS tohoto tagu string `"var model = "`, tak považuje tento tag za správný. Dál projíždí celý JS tohoto tagu a hledá řádku, která (, když se osekají mezera a taby,) začíná `"var meetingsData = "`. Pokud takovou řádku najde, tak tento začátek odsekne a zbyde jen JSON schůzek (a středník na konci). JSON vypadá takto:
+```JSON
+[
+    {
+        "Id":*ID_SCHUZKY*,
+        "MeetingId":null,
+        "MeetingStart":"*START_SCHUZKY*",
+        "MeetingEnd":"0001-01-01T00:00:00",
+        "Title":"Název schůzky",
+        "Details":null,
+        "OwnerId":"*ID_POŘADATELE*",
+        "Error":null,
+        "RecipientTypeCode":null,
+        "RecipientCode":null,
+        "Participants":null,
+        "ParticipantsReadedCount":0,
+        "ParticipantsTotalCount":0,
+        "OwnerName":"Pořadatel/Vlastník schůzky",
+        "ParticipantsListOfRead":null,
+        "ParticipantsListOfDontRead":null,
+        "MeetingStartDate":"0001-01-01T00:00:00",
+        "MeetingStartTime":"0001-01-01T00:00:00",
+        "MeetingEndDate":"0001-01-01T00:00:00",
+        "MeetingEndTime":"0001-01-01T00:00:00",
+        "IsOver":true,
+        "IsOwner":false,
+        "RecipientsDisplayName":"Nějaký přájemce třeba třída A3",
+        "CanEdit":false,
+        "IsInvitationByEmailOrKomens":false,
+        "JoinMeetingUrl":null,
+        "HasExternalChange":false
+    },
+]
+```
+Údaje o schůzkách jsou stejně kvalitní jako u předchozího způsoby (90% jsou invalidní data). Ale máme IDčka schůzek (ale jen nadcházejících). No ale v tomto `<script>` tagu se nachází ještě seznam všech studentů na škole. Ano, je to tak - a absolutně nemám ponětí, co tam dělá, jelikož jsem nenarazil na jedinou věc, kde se používá... Každopádně nyní hledáme řádku začínající (opět po osekání mezer a tabů) `"model.Students = ko.mapping.fromJS("`. Kdyý ji najdeme a osekneme začátek a konec (tedy `");"`), tak získáme JSON studentů:
+```JSON
+[
+    {
+      "Id":"*ID_STUDENTA*",
+      "Name":"*JMÉNO*",
+      "Surname":"*PŘÍMENÍ*",
+      "Class":"*TŘÍDA*",
+      "FullName":"TŘÍDA JMÉNO PŘIJMENÍ"
+   },
+   ...
+]
+```
+Klíč `"Name"` popřípadě obsahuje i druhé jméno. Klíč `"FullName"` je poskládán z ostatních hodnot.<br>
+*Pozn.: Pool ID pro studenty, učitele a možná něco dalšího je nejspíše stejný.*
+
+## **/Collaboration/OnlineMeeting/Detail/**
 #### Klíč: `meetings_info`
-```diff
-- DODĚLAT :)
+Jeden z další enpointů, který normální uživalel nevidí. Slouží k získání informací o schůzce s určitím ID. Dotaz je GET request:
+```http
+GET /Collaboration/OnlineMeeting/Detail/*ID_SCHUZKY* HTTP/1.1
+```
+Vrací se nám JSON:
+```JSON
+{
+   "success":true,
+   "error":"",
+   "data":{
+      "Id":*ID_SCHUZKY*,
+      "MeetingId":"AQMkADYyZtQxNTFmLWU0NMEtmDYyZi05MmYWLTgyZjQ4NTQyOTg5YQBGAAADw-umPgBqOEi5DCaofeuo1gcAMC8d3HCMpEijse0_agIBP7AAAgENAAAAMC8d3HCMpEijse2_agIBPgAB_e8TBQAAAA==",
+      "MeetingStart":"*START_SCHŮZKY*",
+      "MeetingEnd":"*KONEC_SCHŮZKY*",
+      "Title":"*NÁZEV_SCHŮZKY*",
+      "Details":"*OBSAH_ZPRÁVY_SCHŮZKY*",
+      "OwnerId":"*ID_POŘEDATELE*",
+      "Error":null,
+      "RecipientTypeCode":"ZU",
+      "RecipientCode":"1022FC",
+      "Participants":[
+         {
+            "PersonId":"*ID_OSOBY*",
+            "PersonName":"*JMÉNO_OSOBY*",
+            "Readed":"*ČAS_PŘEČTENÍ*",
+            "RecipientRole":2,
+            "Emails":null
+         },
+         {
+            "PersonId":"*ID_OSOBY*",
+            "PersonName":"*JMÉNO_OSOBY*",
+            "Readed":null,
+            "RecipientRole":2,
+            "Emails":null
+         },
+         {
+            "PersonId":"*ID_OSOBY*",
+            "PersonName":"*JMÉNO_OSOBY*",
+            "Readed":"*ČAS_PŘEČTENÍ*",
+            "RecipientRole":1,
+            "Emails":null
+         },
+         ...
+      ],
+      "ParticipantsReadedCount":10,
+      "ParticipantsTotalCount":29,
+      "OwnerName":null,
+      "ParticipantsListOfRead":[
+         {
+            "PersonId":"*ID_OSOBY*",
+            "PersonName":"*JMÉNO_OSOBY*",
+            "Readed":"*ČAS_PŘEČTENÍ*",
+            "RecipientRole":2,
+            "Emails":null
+         },
+         ...
+      ],
+      "ParticipantsListOfDontRead":[
+         {
+            "PersonId":"*ID_OSOBY*",
+            "PersonName":"*JMÉNO_OSOBY*",
+            "Readed":null,
+            "RecipientRole":2,
+            "Emails":null
+         },
+         ...
+      ],
+      "MeetingStartDate":"*START_SCHŮZKY*",
+      "MeetingStartTime":"*START_SCHŮZKY*",
+      "MeetingEndDate":"*KONEC_SCHŮZKY*",
+      "MeetingEndTime":"*KONEC_SCHŮZKY*",
+      "IsOver":false,
+      "IsOwner":false,
+      "RecipientsDisplayName":"žáci",
+      "CanEdit":false,
+      "IsInvitationByEmailOrKomens":true,
+      "JoinMeetingUrl":"*URL_NA_PŘIPOJENÍ*",
+      "HasExternalChange":false
+   }
+}
+```
+Výsledek je zase obalen jakýmsi "statusem" a data, která nás zajímají jsou pod klíčem `"data"`. Klíč `"Id"` je ID schůzky. Účel klíče `"MeetingID"`, ale vypadá, jako nějaký Base64. Klíče `"MeetingStart"`, `"MeetingStartDate"` a `"MeetingStartTime"` obsahují stejnou hodnotu ve formátu `%Y-%m-%dT%H:%M:%S%z"`. Stejně tak jsou si rovny klíče `"MeetingEnd"`, `"MeetingEndDate"` a `"MeetingEndTime"` (i stejný formát času). Název schůzky je v klíči `"Title"`, zpráva ke schůzce je v klíči `"Details"` a ID pořadatele je v klíči `"OwnerId"`. Seznam (pozvaných) účastníků je v klíči `"Participants"` (nachází se v něm i pořadatel). Jednotlivé položky v tomto seznamu mají ID v klíči `"PersonId"`, jméno je v klíči `"PersonName"`. Pokud si učástník pozvánku přečetl, tak pod klíčem `"Readed"` je čas přečtení ve formátu `%Y-%m-%dT%H:%M:%S.%f`.<br>
+*Pozn.: Přestože je zde napsáno, že poslední čast hodnoty je `%f`, tak tomu tak v Pythonu není. Délka zlomku sekundy se liší a může přesahovat maximální délku pro `%f` v Pythonu. `BakalariAPI` řeší tento problém tím, že zlomky sekundy odsekává.*<br>
+Klíč `"RecipientRole"` určuje "postavení"/"role" - Hodnota "1" je pořadatel, hodnota "2" účastník. Užitek klíče `"Emails"` není znám. Mimo seznamu v klíči `"Participants"` jsou tu ještě 2 další seznamy: `"ParticipantsListOfRead"` obsahující účastníky, kteří už pozvánku četli/viděli (bez pořadatele) (tedy ty, u kterých klíč `"Readed"` není `null`) a `"ParticipantsListOfDontRead"` obsahující zbytek (opět bez pořadatele). V klíči `"ParticipantsTotalCount"` je počet účastníku bez pořadatele. Poslední zajímavý klíč je `"JoinMeetingUrl"`, ve kterém se nachází URL na připojení na schůzku.<br>
+*Pozn.: Klíč `"OwnerName"` je vždy `null` a pokud chceme jméno pořadatele, musíme prohledat seznam v klíči `"Participants"` a najít položku, kde se klíč `"Id"` shoduje s `"OwnerId"` nebo kde klíč `"RecipientRole"` je roven "1".*<br>
+Pokud ID schůzky neexistuje, je response HTTP 302 (Found) a přesměrování na `/dashboard` endpointt s GET parametrem `"e="`.<br>
+Pokud ID schůzky existuje, ale schůzka neexistuje (nebo tak něco), je response HTTP 500 (Internal Server Error) a JSON je následující:
+```JSON
+{
+   "success":false,
+   "error":"Nepodařilo se načíst detail schůzky.",
+   "data":null
+}
 ```

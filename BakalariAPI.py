@@ -16,37 +16,26 @@ LAST_SUPPORTED_VERSION = "1.34.1006.1"
 
 
 Endpoints = {
-    "login":            "/login",
-    "logout":           "/logout",
-    "dashboard":        "/dashboard",
-    "komens":           "/next/komens.aspx",
-    "komens_get":       "/next/komens.aspx/GetMessageData",
-    "komens_confirm":   "/next/komens.aspx/SetMessageConfirmed",
-    "file":             "/next/getFile.aspx",
-    "grades":           "/next/prubzna.aspx",
-    "session_info":     "/sessioninfo",
-    "session_extend":   "/sessionextend",
-    "meetings":         "/Collaboration/OnlineMeeting/MeetingsOverview",
-    "meetings_info":    "/Collaboration/OnlineMeeting/Detail/",
-    "user_info":        "/next/osobni_udaje.aspx"
+    "login":                "/login",
+    "logout":               "/logout",
+    "dashboard":            "/dashboard",
+    "komens":               "/next/komens.aspx",
+    "komens_get":           "/next/komens.aspx/GetMessageData",
+    "komens_confirm":       "/next/komens.aspx/SetMessageConfirmed",
+    "file":                 "/next/getFile.aspx",
+    "grades":               "/next/prubzna.aspx",
+    "session_info":         "/sessioninfo",
+    "session_extend":       "/sessionextend",
+    #"meetings":             "/Collaboration/OnlineMeeting",
+    "meetings_overview":    "/Collaboration/OnlineMeeting/MeetingsOverview",
+    "meetings_info":        "/Collaboration/OnlineMeeting/Detail/",
+    "user_info":            "/next/osobni_udaje.aspx"
 }
-
-
-
-
-
-
-
-
-
-
-
 
 
 
 def IsHTTPScheme(url: str) -> bool:
     # Source: https://stackoverflow.com/questions/7160737/how-to-validate-a-url-in-python-malformed-or-not
-    # TODO: Napsat si vlastní
     regex = re.compile(
         r'^(?:http)s?://' # http:// or https://
         r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|' #domain...
@@ -89,7 +78,7 @@ def GetText(soup: BeautifulSoup) -> str:
         soup = body
     
     return soup.get_text().strip()
-def Fist2Upper(string: str) -> str:
+def First2Upper(string: str) -> str:
     return string[0].upper() + string[1:]
 def String2Datetime(string: str) -> datetime:
     formats = [
@@ -170,15 +159,14 @@ class KomensFile(BakalariObject):
 
 class Komens(BakalariObject):
     """Třída/objekt držící informace o Komens (zprávě/zprách)"""
-    def __init__(self, ID: str, sender: str, content: str, time: str, confirm: bool, confirmed: bool, type: str, readed: bool, files: list[KomensFile] = None, instance: BakalariAPI = None):
+    def __init__(self, ID: str, sender: str, content: str, time: datetime, confirm: bool, confirmed: bool, type: str, files: list[KomensFile] = None, instance: BakalariAPI = None):
         super(Komens, self).__init__(ID)
         self.Sender: str = sender
         self.Content: str = content
-        self.Time: datetime = datetime.strptime(time, "%d.%m.%Y %H:%M") #TODO: Parse it outside
+        self.Time: datetime = time
         self.NeedsConfirm: bool = confirm
         self.Confirmed: bool = confirmed
         self.Type: str = type
-        self.Readed: bool = readed
         self.Files: list[KomensFile] = files
         self.Instance: BakalariAPI = instance
     def __eq__(self, other: Komens):
@@ -186,10 +174,10 @@ class Komens(BakalariObject):
     # @property
     # def Content(self) -> str:
     #     return BeautifulSoup(self.RawContent, "html.parser").prettify()
-    def Confirm(self): #TODO: Some how refractor this...
+    def Confirm(self):
         response = self.Instance.session.post(self.Instance.server.GetEndpoint("komens_confirm"), json={
             "idmsg": self.ID
-        }).json()
+        }).json() # Jakože tohle jen jen ztráta výkonu... Actually to nemusíme vůbec parsovat...
         if not response["d"]:
             warnings.warn(f"Při potvrzování zprávy nebylo vráceno 'true', ale '{response['d']}'; Pravděpodobně nastala chyba; Celý objekt: {response}", Exceptions.UnexpectedBehaviour)
     def Format(self) -> str:
@@ -215,7 +203,7 @@ class Grade(BakalariObject):
         self.Note2: str = note2
         self.Date1: datetime = date1
         self.Date2: datetime = date2
-        self.Order: str = orderInClass
+        self.OrderInClass: str = orderInClass
         self.Type: str = type
         #self.Target: str = target
     def __eq__(self, other: Grade):
@@ -304,7 +292,6 @@ class BakalariAPI:
         self.Server.RegistrationNumber = int(data["evidNumber"])
     
     def Login(self, init: bool = True):
-        #TODO: Retry login X times
         try:
             self.Session = requests.Session()
             response = self.Session.post(self.Server.GetEndpoint("login"), {
@@ -335,10 +322,10 @@ class BakalariAPI:
     def Save(self):
         pass
 
-    def GetGrades(self, fromData: datetime = None) -> list[Grade]:
+    def GetGrades(self, fromDate: datetime = None) -> list[Grade]:
         output = []
         try:
-            response = self.Session.get(self.Server.GetEndpoint("grades") + ("" if fromData == None else f"?dfrom={fromData.strftime('%Y%m%d')}0000&subt=obdobi"))
+            response = self.Session.get(self.Server.GetEndpoint("grades") + ("" if fromDate == None else f"?dfrom={fromDate.strftime('%Y%m%d')}0000&subt=obdobi"))
         except requests.exceptions.RequestException as e:
             raise Exceptions.ConnectionException from e
         soup = BeautifulSoup(response.content, "html.parser")
@@ -416,11 +403,10 @@ class BakalariAPI:
             ID,
             response["Jmeno"],
             response["MessageText"],
-            response["Cas"],
+            datetime.strptime(response["Cas"], "%d.%m.%Y %H:%M"),
             response["MohuPotvrdit"],
             response["Potvrzeno"],
             response["Kind"],
-            response["CetlJsem"],
             soubory,
             self
         )
@@ -428,11 +414,10 @@ class BakalariAPI:
             Looting.AddLoot(komens)
         return komens
 
-    #TODO: Filtr MettingsIDs ((všechny/aktivní) | (od, do) | ...)
-    def GetMettingsIDs(self) -> list[str]:
+    def GetMeetingsIDs(self, lootStudents: bool = True) -> list[str]:
         output = []
         try:
-            response = self.Session.get(self.Server.GetEndpoint("meetings"))
+            response = self.Session.get(self.Server.GetEndpoint("meetings_overview"))
         except requests.exceptions.RequestException as e:
             raise Exceptions.ConnectionException from e
         soup = BeautifulSoup(response.content, "html.parser")
@@ -452,7 +437,7 @@ class BakalariAPI:
                 meetingsJSON = json.loads(line.strip()[len("var meetingsData = "):-1])
                 for meeting in meetingsJSON:
                     output.append(str(meeting["Id"])) # Actually je to číslo, ale všechny ostaní IDčka jsou string, takže se budeme tvářit že je string i tohle...
-            elif self.Looting and line.startswith("model.Students = ko.mapping.fromJS("):
+            elif lootStudents and line.startswith("model.Students = ko.mapping.fromJS("):
                 loot["Students"] = True
                 studentsJSON = json.loads(line.strip()[len("model.Students = ko.mapping.fromJS("):-2])
                 for student in studentsJSON:
@@ -462,14 +447,32 @@ class BakalariAPI:
                         student["Surname"],
                         student["Class"]
                     ))
-            if loot["Meetings"] and (not self.Looting or loot["Students"]):
+            if loot["Meetings"] and (not lootStudents or loot["Students"]):
                 break
         return output
+    def GetMeetingsIDsNew(self, fromDate: datetime, toDate: datetime) -> list[str]:
+        try:
+            output = []
+            response = self.Session.post(self.Server.GetEndpoint("meetings_overview"), {
+                "TimeWindow": "FromTo",
+                "FilterByAuthor": "AllInvitations",
+                "MeetingFrom": fromDate.strftime("%Y-%m-%dT%H:%M:%S") + "+00:00",
+                "MeetingTo": toDate.strftime("%Y-%m-%dT%H:%M:%S") + "+00:00"
+            }).json()
+            for meeting in response["data"]["Meetings"]:
+                output.append(str(meeting["Id"]))
+            return output
+        except requests.exceptions.RequestException as e:
+            raise Exceptions.ConnectionException from e
+    def GetAllMeetingsIDs(self) -> list[str]:
+        return self.GetMeetingsIDsNew(datetime(1, 1, 1), datetime(9999, 12, 31, 23, 59, 59))
     def GetMeeting(self, ID: str) -> Meeting:
         try:
             response = self.Session.get(self.Server.GetEndpoint("meetings_info") + ID).json()
         except requests.exceptions.RequestException as e:
             raise Exceptions.ConnectionException from e
+        if not response["success"]:
+            return None
         meeting = Meeting(
             response["data"]["Id"],
             response["data"]["OwnerId"],
@@ -485,7 +488,34 @@ class BakalariAPI:
             Looting.AddLoot(meeting)
         return meeting
 
-
+    def GetStudents(self) -> list[Student]:
+        output = []
+        try:
+            response = self.Session.get(self.Server.GetEndpoint("meetings_overview"))
+        except requests.exceptions.RequestException as e:
+            raise Exceptions.ConnectionException from e
+        soup = BeautifulSoup(response.content, "html.parser")
+        scritps = soup.head("script")
+        for script in scritps:
+            formated = script.prettify()
+            if "var model = " in formated:
+                break
+        for line in LineIterator(formated):
+            line = line.strip()
+            if line.startswith("model.Students = ko.mapping.fromJS("):
+                studentsJSON = json.loads(line.strip()[len("model.Students = ko.mapping.fromJS("):-2])
+                for student in studentsJSON:
+                    output.append(Student(
+                        student["Id"],
+                        student["Name"],
+                        student["Surname"],
+                        student["Class"]
+                    ))
+                break
+        if self.Looting:
+            for item in output:
+                Looting.AddLoot(item)
+        return output
 
 class Looting:
     Data: dict[str, BakalariObject] = {}
@@ -538,19 +568,6 @@ class Looting:
         parsed = json.loads(jsonString)
         module = __import__(__name__)
 
-        # for key, arr in parsed.items():
-        #     if not hasattr(module, key):
-        #         raise TypeError("Unknown type to load; Type: " + key)
-        #     class_constructor = getattr(module, key)
-        #     signature = inspect.signature(class_constructor)
-        #     for values in arr:
-        #         supply_list = []
-        #         for param in signature.parameters:
-        #             param = Fist2Upper(param.lstrip("_"))
-        #             if param in values:
-        #                 supply_list.append(values[param])
-        #         print(class_constructor(*supply_list).Format())
-        
         def Recursion(data) -> object:
             for index, value in (enumerate(data) if isinstance(data, list) else data.items()):
                 #print(f"Enumerating index '{index}', value: {value}")
@@ -567,12 +584,16 @@ class Looting:
                     signature = inspect.signature(class_constructor)
                     supply_list = []
                     for param in signature.parameters:
-                        param = Fist2Upper(param.lstrip("_"))
+                        param = First2Upper(param.lstrip("_"))
+                        # print(f"Trying to add '{param}'...")
                         if param in data:
                             supply_list.append(data[param])
+                            # print(f"Added '{param}' with value '{data[param]}'")
+                    # print(f"In signature: {len(signature.parameters)}; In supply_list: {len(supply_list)}")
                     data = class_constructor(*supply_list)
                     #print("Adding new object to Loot (" + class_constructor.__name__ + ")")
                     Looting.AddLoot(data, skipCheck)
             return data
+        
         parsed = Recursion(parsed)
 
