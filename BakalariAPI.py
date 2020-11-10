@@ -69,7 +69,7 @@ def GetText(soup: BeautifulSoup) -> str:
         - Pokud je zde "<body>" tag, tak vezme jen ten
         - Stripne text (Je to vůbec potřeba? eShrug)
     """
-    #TODO: Wrapping?
+    #TODO: Text Wrapping?
     for br in soup("br"):
         br.replace_with("\n" + br.text)
 
@@ -140,13 +140,13 @@ class KomensFile(BakalariObject):
         return self.ID == other.ID
     def GenerateURL(self):
         """Generuje (Sestaví) URL k souboru na serveru (SeverURL + Endpoint + ID_SOUBORU)"""
-        return self.Instance.server.GetEndpoint("file") + "?f=" + self.ID
+        return self.Instance.Server.GetEndpoint("file") + "?f=" + self.ID
     def DownloadStream(self) -> requests.Response:
         """Otevře stream na pro daný soubor pomocí 'requests' modulu a vrátí requests.Response, kterým lze iterovat pomocí metody '.iter_lines()'"""
-        self.Instance.session.get(self.GenerateURL(), stream=True)
+        self.Instance.Session.get(self.GenerateURL(), stream=True)
     def Download(self) -> bytes:
         """Stáhne daný soubor a vrátí ho jakožto (typ) byty (Doporučuje se ale použít metoda '.DownloadStream()', jelikož se zde soubor ukládá do paměti a ne na disk)"""
-        return self.Instance.session.get(self.GenerateURL()).content
+        return self.Instance.Session.get(self.GenerateURL()).content
     def Format(self) -> str:
         return (
             f"ID: {self.ID}\n"
@@ -175,7 +175,7 @@ class Komens(BakalariObject):
     # def Content(self) -> str:
     #     return BeautifulSoup(self.RawContent, "html.parser").prettify()
     def Confirm(self):
-        response = self.Instance.session.post(self.Instance.server.GetEndpoint("komens_confirm"), json={
+        response = self.Instance.Session.post(self.Instance.Server.GetEndpoint("komens_confirm"), json={
             "idmsg": self.ID
         }).json() # Jakože tohle jen jen ztráta výkonu... Actually to nemusíme vůbec parsovat...
         if not response["d"]:
@@ -207,7 +207,7 @@ class Grade(BakalariObject):
         self.Type: str = type
         #self.Target: str = target
     def __eq__(self, other: Grade):
-        return self.ID == other.ID # and self.Target == other.Target # Momentálně se cuttuje support pro ostatní typy účtů než je student a #todo: Přidat target a předělat __eq__ u všech 
+        return self.ID == other.ID
     def Format(self):
         return (
             f"ID: {self.ID}\n"
@@ -318,9 +318,6 @@ class BakalariAPI:
             self.Session.get(self.Server.GetEndpoint("session_extend"))
         except requests.exceptions.RequestException as e:
             raise Exceptions.ConnectionException from e
-
-    def Save(self):
-        pass
 
     def GetGrades(self, fromDate: datetime = None) -> list[Grade]:
         output = []
@@ -541,17 +538,6 @@ class Looting:
     def AddLoot(object: BakalariObject, skipCheck: bool = False) -> bool:
         """Adds object to loot if it's ID is not already there; Returns True when object is added, False otherwise"""
 
-        # if isinstance(object, KomensFile):
-        #     pass
-        # elif isinstance(object, Komens):
-        #     pass
-        # elif isinstance(object, Grade):
-        #     pass
-        # elif isinstance(object, Meeting):
-        #     pass
-        # elif isinstance(object, Student):
-        #     pass
-
         if not skipCheck and object.ID in Looting.IDs:
             return False
         Looting.Data.setdefault(type(object).__name__, [])
@@ -580,7 +566,6 @@ class Looting:
                     if not hasattr(module, data["_type"]):
                         raise TypeError("Unknown type to load; Type: " + data["_type"])
                     class_constructor = getattr(module, data["_type"])
-                    #del data["_type"] # Není potřeba, protože do costructoru vybíráme jen to co potřebujem (a ne všechno co máme)
                     signature = inspect.signature(class_constructor)
                     supply_list = []
                     for param in signature.parameters:
