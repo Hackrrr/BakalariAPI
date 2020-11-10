@@ -80,7 +80,7 @@ def Login():
             password,
             False
         )
-    except BakalariAPI.Exceptions.InputException:
+    except BakalariAPI.InputException:
         print("Neplatné URL schéma; Končím")
         exit(1)
     print(f"Kontrola stavu serveru/webu... ({url})")
@@ -91,7 +91,7 @@ def Login():
     print(f"Pokus o přihlášení jako '{user}'")
     try:
         API.Login(False)
-    except BakalariAPI.Exceptions.AuthenticationException:
+    except BakalariAPI.AuthenticationException:
         print("Nepovedlo se přihlásit (nesprávné přihlašovací údaje)")
         exit(1)
     print("Přihlášení úspěšné")
@@ -170,16 +170,16 @@ def Schuzky():
             input("Pro pokračování stiskni klávasu...")
             cls()
 def Studenti():
-    if interactive and len(BakalariAPI.Looting.Data["Student"]) and AnoNeDialog("Podařilo získat seznam studentů. Chcete jej zobrazit? "):
+    if interactive and len(API.Loot.Data["Student"]) and AnoNeDialog("Podařilo získat seznam studentů. Chcete jej zobrazit? "):
         count = InputCislo("Kolik výsledků najednou? (Výchozí 25) ", 25)
         offset = 0
-        length = len(BakalariAPI.Looting.Data["Student"])
+        length = len(API.Loot.Data["Student"])
         cls()
         while offset < length:
             for _ in range(count):
                 if (offset >= length):
                     break
-                print(BakalariAPI.Looting.Data["Student"][offset].Format())
+                print(API.Loot.Data["Student"][offset].Format())
                 offset += 1
             input(f"Pro pokračování stiskni klávasu... (Již zobrazeno {offset} výsledků z {length})")
             cls()
@@ -195,7 +195,6 @@ def RunTest(id):
         print(f"Test {id} skončil; Výsledek testu je {o}")
     else:
         print(f"Test {id} nenalezen")
-
 def Test0():
     print("Spouštím testování...")
     while True:
@@ -219,12 +218,12 @@ def Test1():
     # originalStudentLen = len(BakalariAPI.Looting.Data["Student"])
     # randomStudentIndex = 10 # Ano, náhodný... Extrémně se mi nechce ještě teď po zprovoznění deseralizace lootingu něco hledat...
     # randomStudentOriginalName = BakalariAPI.Looting.Data["Student"][randomStudentIndex].Name + " " + BakalariAPI.Looting.Data["Student"][randomStudentIndex].Surname
-    string = BakalariAPI.Looting.ToJSON()
+    string = API.Loot.ToJSON()
 
-    BakalariAPI.Looting.Data = {}
-    BakalariAPI.Looting.IDs = {}
+    API.Loot.Data = {}
+    API.Loot.IDs = {}
 
-    BakalariAPI.Looting.FromJSON(string)
+    API.Loot.FromJSON(string)
     # currentStudentLen = len(BakalariAPI.Looting.Data["Student"])
     # randomStudentCurrentName = BakalariAPI.Looting.Data["Student"][randomStudentIndex].Name + " " + BakalariAPI.Looting.Data["Student"][randomStudentIndex].Surname
     # if currentStudentLen == originalStudentLen:

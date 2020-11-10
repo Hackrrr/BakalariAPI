@@ -286,13 +286,13 @@ class Student(BakalariObject):
 
 class BakalariAPI:
     """Třída/objekt který obsluhuje ostatní komponenty"""
-
     def __init__(self, server: Server, user: str, password: str, login: bool = True, looting: bool = True):
         self.Server: Server = server
         self.User: str = user
         self.Password: str = password
         self.Session: requests.Session = requests.Session()
         self.Looting: bool = looting
+        self.Loot: Looting = Looting() if self.Looting else None
         self.UserType: str = None
         self.UserHash: str = None
         if login:
@@ -365,7 +365,7 @@ class BakalariAPI:
             ))
         if self.Looting:
             for item in output:
-                Looting.AddLoot(item)
+                self.Loot.AddLoot(item)
         return output
     def GetAllGrades(self) -> list[Grade]:
         return self.GetGrades(datetime(1, 1, 1))
@@ -416,7 +416,7 @@ class BakalariAPI:
                     warnings.warn(f"ID zprávy se neschoduje s ID zprávy referencované v souboru; ID zprávy: {ID}, ID v souboru: {soubor['idmsg']}", UnexpectedBehaviour)
             if self.Looting:
                 for item in soubory:
-                    Looting.AddLoot(item)
+                    self.Loot.AddLoot(item)
         komens = Komens(
             ID,
             response["Jmeno"],
@@ -429,7 +429,7 @@ class BakalariAPI:
             self
         )
         if self.Looting:
-            Looting.AddLoot(komens)
+            self.Loot.AddLoot(komens)
         return komens
 
     def GetMeetingsIDs(self, lootStudents: bool = True) -> list[str]:
@@ -459,7 +459,7 @@ class BakalariAPI:
                 loot["Students"] = True
                 studentsJSON = json.loads(line.strip()[len("model.Students = ko.mapping.fromJS("):-2])
                 for student in studentsJSON:
-                    Looting.AddLoot(Student(
+                    self.Loot.AddLoot(Student(
                         student["Id"],
                         student["Name"],
                         student["Surname"],
@@ -503,7 +503,7 @@ class BakalariAPI:
             [(s["PersonId"], datetime.strptime(s["Readed"][:-(len(s["Readed"]) - s["Readed"].rfind("."))], "%Y-%m-%dT%H:%M:%S")) for s in response["data"]["ParticipantsListOfRead"]]
         )
         if self.Looting:
-            Looting.AddLoot(meeting)
+            self.Loot.AddLoot(meeting)
         return meeting
 
     def GetStudents(self) -> list[Student]:
@@ -532,13 +532,10 @@ class BakalariAPI:
                 break
         if self.Looting:
             for item in output:
-                Looting.AddLoot(item)
+                self.Loot.AddLoot(item)
         return output
 
 class Looting:
-    Data: dict[str, BakalariObject] = {}
-    IDs: dict[str, BakalariObject] = {}
-
     class JSONSerializer(json.JSONEncoder):
         def default(self, object):
             if isinstance(object, datetime):
@@ -552,26 +549,26 @@ class Looting:
                 if "Instance" in output:
                     del output["Instance"]
                 return output
-            
             #raise TypeError()
 
-    @staticmethod
-    def AddLoot(object: BakalariObject, skipCheck: bool = False) -> bool:
+    def __init__(self):
+        self.Data: dict[str, BakalariObject] = {}
+        self.IDs: dict[str, BakalariObject] = {}
+
+    def AddLoot(self, object: BakalariObject, skipCheck: bool = False) -> bool:
         """Adds object to loot if it's ID is not already there; Returns True when object is added, False otherwise"""
 
-        if not skipCheck and object.ID in Looting.IDs:
+        if not skipCheck and object.ID in self.IDs:
             return False
-        Looting.Data.setdefault(type(object).__name__, [])
-        Looting.Data[type(object).__name__].append(object)
-        Looting.IDs[object.ID] = object
+        self.Data.setdefault(type(object).__name__, [])
+        self.Data[type(object).__name__].append(object)
+        self.IDs[object.ID] = object
         return True
 
-    @staticmethod
-    def ToJSON(byIDs: bool = False, ensure_ascii: bool = False):
-        return Looting.JSONSerializer(ensure_ascii = ensure_ascii).encode(Looting.IDs if byIDs else Looting.Data)
+    def ToJSON(self, byIDs: bool = False, ensure_ascii: bool = False):
+        return self.JSONSerializer(ensure_ascii = ensure_ascii).encode(self.IDs if byIDs else self.Data)
 
-    @staticmethod
-    def FromJSON(jsonString: str, skipCheck: bool = False):
+    def FromJSON(self, jsonString: str, skipCheck: bool = False):
         parsed = json.loads(jsonString)
         module = __import__(__name__)
 
@@ -598,7 +595,7 @@ class Looting:
                     # print(f"In signature: {len(signature.parameters)}; In supply_list: {len(supply_list)}")
                     data = class_constructor(*supply_list)
                     #print("Adding new object to Loot (" + class_constructor.__name__ + ")")
-                    Looting.AddLoot(data, skipCheck)
+                    self.AddLoot(data, skipCheck)
             return data
         
         parsed = Recursion(parsed)
