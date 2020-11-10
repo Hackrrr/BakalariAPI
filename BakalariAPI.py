@@ -9,10 +9,31 @@ import inspect
 import requests                         # Install
 from bs4 import BeautifulSoup           # Install
 
-import Exceptions
+class Exception(Exception):
+    """Základní exception classa pro BakalariAPI
+    Všechny výjimky mají dědičnou cestu k této výjimky"""
+class AuthenticationException(Exception):
+    """Výjimka při autentizaci"""
+class ConnectionException(Exception):
+    """Výjimka při chybě při pokusu o připojení - Server nebo Bakaláři pravděpodobně neběží"""
+class InputException(Exception):
+    """Výjimka při chybném vstupu"""
+class UserNotLoggedIn(Exception):
+    """Výjimka při pokusu o vykonání autentizované akci, když uživatel není přihlášen"""
+
+class Warning(UserWarning):
+     """Základní warning classa pro BakalariAPI
+    Všechny varování mají dědičnou cestu k tomuto varování"""
+class UnexpectedBehaviour(Warning):
+    """Nečekaná odpoveď/přesměrování od serveru (pravděpodobně na serveru běží jiná (nová) veze Bakalařů)"""
+class DifferentVersion(Warning):
+    """Bakaláři mají jinou verzi, než BakalariAPI podporuje"""
+class SameID(Warning):
+    """Nalezeny objekty (při zpracování/ukládání výsledků), které mají stejné ID ale nejsou totožný
+    Pozn.: Mohou být i totžný, ale není to jedna a ta samá instance (prostě OOP)"""
 
 
-LAST_SUPPORTED_VERSION = "1.34.1006.1"
+LAST_SUPPORTED_VERSION = "1.35.1023.2"
 
 
 Endpoints = {
@@ -99,7 +120,7 @@ class Server:
     """Třída/objekt držící informace o serveru na kterém běží Bakaláři"""
     def __init__(self, url: str):
         if (not IsHTTPScheme(url)):
-            raise Exceptions.InputException
+            raise InputException
         self.Url: str = url
         self.Version: str = None
         self.VersionDate: datetime = None
@@ -179,7 +200,7 @@ class Komens(BakalariObject):
             "idmsg": self.ID
         }).json() # Jakože tohle jen jen ztráta výkonu... Actually to nemusíme vůbec parsovat...
         if not response["d"]:
-            warnings.warn(f"Při potvrzování zprávy nebylo vráceno 'true', ale '{response['d']}'; Pravděpodobně nastala chyba; Celý objekt: {response}", Exceptions.UnexpectedBehaviour)
+            warnings.warn(f"Při potvrzování zprávy nebylo vráceno 'true', ale '{response['d']}'; Pravděpodobně nastala chyba; Celý objekt: {response}", UnexpectedBehaviour)
     def Format(self) -> str:
         return (
             f"ID: {self.ID}\n"
@@ -281,7 +302,7 @@ class BakalariAPI:
         try:
             soup = BeautifulSoup(self.Session.get(self.Server.GetEndpoint("user_info")).content, "html.parser")
         except requests.exceptions.RequestException as e:
-            raise Exceptions.ConnectionException from e
+            raise ConnectionException from e
         data = json.loads(soup.head["data-pageinfo"])
         self.UserType = data["userType"]
         self.UserHash = data["userHash"]
@@ -299,32 +320,32 @@ class BakalariAPI:
                 "password": self.Password
             })
         except requests.exceptions.RequestException as e:
-            raise Exceptions.ConnectionException from e
+            raise ConnectionException from e
         if response.url == self.Server.GetEndpoint("login"):
-            raise Exceptions.AuthenticationException
+            raise AuthenticationException
         if not response.url.endswith(self.Server.GetEndpoint("dashboard")):
-            warnings.warn(f"Unexpected redirect on '{response.url}'", Exceptions.UnexpectedBehaviour)
+            warnings.warn(f"Unexpected redirect on '{response.url}'", UnexpectedBehaviour)
         if init:
             self.Init()
     def Logout(self):
         try:
             self.Session.get(self.Server.GetEndpoint("login") + "?s=-1")
         except requests.exceptions.RequestException as e:
-            raise Exceptions.ConnectionException from e
+            raise ConnectionException from e
         else:
             self.Session = requests.Session()
     def Extend(self):
         try:
             self.Session.get(self.Server.GetEndpoint("session_extend"))
         except requests.exceptions.RequestException as e:
-            raise Exceptions.ConnectionException from e
+            raise ConnectionException from e
 
     def GetGrades(self, fromDate: datetime = None) -> list[Grade]:
         output = []
         try:
             response = self.Session.get(self.Server.GetEndpoint("grades") + ("" if fromDate == None else f"?dfrom={fromDate.strftime('%Y%m%d')}0000&subt=obdobi"))
         except requests.exceptions.RequestException as e:
-            raise Exceptions.ConnectionException from e
+            raise ConnectionException from e
         soup = BeautifulSoup(response.content, "html.parser")
         znamkyList = soup.find(id="cphmain_DivBySubject")("div", attrs={"data-clasif": True})
         for znamka in znamkyList:
@@ -361,7 +382,7 @@ class BakalariAPI:
         try:
             response = self.Session.get(target)
         except requests.exceptions.RequestException as e:
-            raise Exceptions.ConnectionException from e
+            raise ConnectionException from e
         soup = BeautifulSoup(response.content, "html.parser")
         komensList = soup.find(id="message_list_content").find("ul").find_all("li", recursive=False)
         for komens in komensList:
@@ -377,7 +398,7 @@ class BakalariAPI:
                 "context": context
             }).json()
         except requests.exceptions.RequestException as e:
-            raise Exceptions.ConnectionException from e
+            raise ConnectionException from e
         soubory = []
         if len(response["Files"]) != 0:
             for soubor in response["Files"]:
@@ -392,7 +413,7 @@ class BakalariAPI:
                 )
                 soubory.append(komensFile)
                 if soubor["idmsg"] != ID:
-                    warnings.warn(f"ID zprávy se neschoduje s ID zprávy referencované v souboru; ID zprávy: {ID}, ID v souboru: {soubor['idmsg']}", Exceptions.UnexpectedBehaviour)
+                    warnings.warn(f"ID zprávy se neschoduje s ID zprávy referencované v souboru; ID zprávy: {ID}, ID v souboru: {soubor['idmsg']}", UnexpectedBehaviour)
             if self.Looting:
                 for item in soubory:
                     Looting.AddLoot(item)
@@ -416,7 +437,7 @@ class BakalariAPI:
         try:
             response = self.Session.get(self.Server.GetEndpoint("meetings_overview"))
         except requests.exceptions.RequestException as e:
-            raise Exceptions.ConnectionException from e
+            raise ConnectionException from e
         soup = BeautifulSoup(response.content, "html.parser")
         scritps = soup.head("script")
         for script in scritps:
@@ -460,14 +481,14 @@ class BakalariAPI:
                 output.append(str(meeting["Id"]))
             return output
         except requests.exceptions.RequestException as e:
-            raise Exceptions.ConnectionException from e
+            raise ConnectionException from e
     def GetAllMeetingsIDs(self) -> list[str]:
         return self.GetMeetingsIDsNew(datetime(1, 1, 1), datetime(9999, 12, 31, 23, 59, 59))
     def GetMeeting(self, ID: str) -> Meeting:
         try:
             response = self.Session.get(self.Server.GetEndpoint("meetings_info") + ID).json()
         except requests.exceptions.RequestException as e:
-            raise Exceptions.ConnectionException from e
+            raise ConnectionException from e
         if not response["success"]:
             return None
         meeting = Meeting(
@@ -490,7 +511,7 @@ class BakalariAPI:
         try:
             response = self.Session.get(self.Server.GetEndpoint("meetings_overview"))
         except requests.exceptions.RequestException as e:
-            raise Exceptions.ConnectionException from e
+            raise ConnectionException from e
         soup = BeautifulSoup(response.content, "html.parser")
         scritps = soup.head("script")
         for script in scritps:

@@ -1,14 +1,12 @@
 #import abc
 import re
 import argparse
-import sys
-from io import StringIO
 
 class ShellArgumentParser(argparse.ArgumentParser):
     def error(self, message):
         #print(message, file=sys.stderr)
         print(message)
-        self.print_help(sys.stderr)
+        self.print_help()
         raise ValueError()
     # def exit(self):
     #     pass
@@ -135,7 +133,7 @@ class Shell:
                     print(f"Neznámý příkaz '{string}'\nZkus napsat 'help' nebo '?' pro nápovědu")
         else:
             fullMatch = None
-            candidates = []
+            candidates = [] #TODO: Pokud má příkaz alias, tak může kovliktovat sám se sebou
             for _, command in self.Commands.items():
                 for commandName in [command.Name] + command.Aliases:
                     if commandName.startswith(first):
@@ -160,8 +158,9 @@ class Shell:
                         print("%-20s %s" % (candidate.Name, candidate.ShortHelp))
             
     def PrintHelp(self):
+        print("Možné příkazy:")
         for _, command in self.Commands.items():
-            print("%-25s - %s" % (" | ".join([command.Name] + command.Aliases), command.ShortHelp))
+            print("\t%-25s - %s" % (" | ".join([command.Name] + command.Aliases), command.ShortHelp))
     
     def ChangePrompt(self, text: str):
         self.Prompt = text

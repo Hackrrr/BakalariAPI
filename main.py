@@ -2,6 +2,7 @@ import argparse
 import os
 import requests
 import BakalariAPI
+import Shell
 from datetime import datetime, timedelta, timezone # Here it comes... Timezone hadndling first feel PepeLaugh
 # Hej! Moje budoucí já... Já vím, že se sem jednou podíváš... Takže až ta chvíle nastane, tak si vzpomeň, že za 100 let budou tenhle samej problém
 # s časovými pásmy řešit furt :) Takže nevadí, že si to pořád ještě po 10h debugu nespravil...
@@ -37,18 +38,6 @@ parser.add_argument(
     action="store_true",
     help="Spusť BakalariAPI shell (velmi se doporučuje skombinovat s '--interactive')"
 )
-# parser.add_argument(
-#     "-t", "--test",
-#     default=False,
-#     action="store_true",
-#     help="Test snippet"
-# )
-# parser.add_argument(
-#     "-d", "--debug",
-#     default=False,
-#     action="store_true",
-#     help="Možnost debug konzole v běhu"
-# )
 args = parser.parse_args()
 
 url = args.url
@@ -79,61 +68,6 @@ def InputCislo(text: str = "", default: int = None):
         if inpt.isdecimal():
             return int(inpt)
         print("Špatná hodnota")
-def DebugMode():
-    try:
-        while True:
-            try:
-                exec("print(" + input() + ")")
-            except KeyboardInterrupt:
-                raise KeyboardInterrupt
-            except Exception as e:
-                print(e)
-    except KeyboardInterrupt:
-        return
-def Shell():
-    """Dočasné řešení interaktivity
-    Nespoléhat se na tohle - Bude se mazat nebo kompletně přepisovat na něco komplexnějšího...
-    """
-    cls()
-    print("Shell aktivní")
-    while True:
-        try:
-            print("BakalariAPI shell> ", end="")
-            inpt = input()
-            if len(inpt) == 0:
-                continue
-            if "help".startswith(inpt.lower()) or inpt == "?":
-                print("%-15s %s" % ("komens",   "Zobrazuje komens zprávy"))
-                print("%-15s %s" % ("schuzky",  "Zobrazuje online schůzky"))
-                print("%-15s %s" % ("studenti", "Zobrazuje studenty"))
-                print("%-15s %s" % ("znamky",   "Zobrazuje známky"))
-                print("%-15s %s" % ("help",     "Zobrazuje (tuto) nápovědu"))
-                print("%-15s %s" % ("?",        "Zobrazuje (tuto) nápovědu"))
-                print("%-15s %s" % ("exit",     "Ukončí aplikaci"))
-                print("%-15s %s" % ("konec",    "Ukončí aplikaci"))
-                print("%-15s %s" % ("testX",    "Spustí testovací snippet s číslem X"))
-            elif "komens".startswith(inpt.lower()):
-                Komens()
-            elif "schuzky".startswith(inpt.lower()):
-                Schuzky()
-            elif "student".startswith(inpt.lower()):
-                Studenti()
-            elif "znamky".startswith(inpt.lower()):
-                Znamky()
-            elif "exit".startswith(inpt.lower()) or "help".startswith(inpt.lower()):
-                Konec()
-                exit(0)
-            elif "test".startswith(inpt[:-1].lower()):
-                getattr(__import__(__name__), f"Test{inpt[-1]}")()
-            else:
-                try:
-                    exec(f"print({inpt})")
-                except Exception as e:
-                    print(e)
-            
-        except KeyboardInterrupt:
-            exit(0)
-
 
 API = None
 
@@ -252,6 +186,16 @@ def Studenti():
 def Konec():
     API.Logout()
 
+def RunTest(id):
+    m = __import__(__name__)
+    t = f"Test{id}"
+    if hasattr(m, t):
+        print(f"Zahajuji test {id}")
+        o = getattr(m, t)()
+        print(f"Test {id} skončil; Výsledek testu je {o}")
+    else:
+        print(f"Test {id} nenalezen")
+
 def Test0():
     print("Spouštím testování...")
     while True:
@@ -304,8 +248,53 @@ def Test2():
 
 
 Login()
+
 if shell:
-    Shell()
+    cls()
+    print("Shell aktivní")
+    shell = Shell.Shell(
+        "BakalariAPI Shell>",
+        allowPythonExec=True,
+        pythonExecPrefix=" "
+    )
+    shell.AddCommand(Shell.Command(
+        "clear",
+        cls,
+        shortHelp="Vyčistí konzoli/terminál",
+        aliases=["cls"]
+    ))
+    shell.AddCommand(Shell.Command(
+        "komens",
+        Komens,
+        shortHelp="Extrahuje a zobrazí komens zprávy"
+    ))
+    shell.AddCommand(Shell.Command(
+        "znamky",
+        Znamky,
+        shortHelp="Extrahuje a zobrazí známky"
+    ))
+    shell.AddCommand(Shell.Command(
+        "schuzky",
+        Schuzky,
+        shortHelp="Extrahuje a zobrazí (nadcházející) schůzky"
+    ))
+    shell.AddCommand(Shell.Command(
+        "studenti",
+        Studenti,
+        shortHelp="Zobrazí studenty"
+    ))
+    parser = Shell.ShellArgumentParser()
+    parser.add_argument("id")
+    shell.AddCommand(Shell.Command(
+        "test",
+        RunTest,
+        parser,
+        "Spustí daný test",
+        spreadArguments=True
+    ))
+    shell.StartLoop()
+    Konec()
+    exit(0)
 
 Komens()
 Znamky()
