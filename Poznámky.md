@@ -11,7 +11,7 @@ Tak toto bylo moje vyjádření k Bakalářům :)
 Zde jsou poznámky, co se kam a proč posílá a jak se z toho dostávají věci, co chceme...
 ## **/login**
 #### Klíč: `login`
-Přihlašovací stránka - formulář s jménem a heslem. Měl by sem redirectovat i request/response na index (tzn. "/").
+Přihlašovací stránka - formulář s jménem a heslem. Měl by sem redirectovat i request/response na root (tzn. "/").
 Zároveň slouží i pro ověřování údajů:
 ```http
 POST /login HTTP/1.1
@@ -404,7 +404,7 @@ Výsledek je zase obalen jakýmsi "statusem" a data, která nás zajímají jsou
 *Pozn.: Přestože je zde napsáno, že poslední čast hodnoty je `%f`, tak tomu tak v Pythonu není. Délka zlomku sekundy se liší a může přesahovat maximální délku pro `%f` v Pythonu. `BakalariAPI` řeší tento problém tím, že zlomky sekundy odsekává.*<br>
 Klíč `"RecipientRole"` určuje "postavení"/"role" - Hodnota "1" je pořadatel, hodnota "2" účastník. Užitek klíče `"Emails"` není znám. Mimo seznamu v klíči `"Participants"` jsou tu ještě 2 další seznamy: `"ParticipantsListOfRead"` obsahující účastníky, kteří už pozvánku četli/viděli (bez pořadatele) (tedy ty, u kterých klíč `"Readed"` není `null`) a `"ParticipantsListOfDontRead"` obsahující zbytek (opět bez pořadatele). V klíči `"ParticipantsTotalCount"` je počet účastníku bez pořadatele. Poslední zajímavý klíč je `"JoinMeetingUrl"`, ve kterém se nachází URL na připojení na schůzku.<br>
 *Pozn.: Klíč `"OwnerName"` je vždy `null` a pokud chceme jméno pořadatele, musíme prohledat seznam v klíči `"Participants"` a najít položku, kde se klíč `"Id"` shoduje s `"OwnerId"` nebo kde klíč `"RecipientRole"` je roven "1".*<br>
-Pokud ID schůzky neexistuje, je response HTTP 302 (Found) a přesměrování na `/dashboard` endpointt s GET parametrem `"e="`.<br>
+Pokud ID schůzky neexistuje, je response HTTP 302 (Found) a přesměrování na `/dashboard` endpointt s GET parametrem `"e="` (ano, parametr je prázdný).<br>
 Pokud ID schůzky existuje, ale schůzka neexistuje (nebo tak něco), je response HTTP 500 (Internal Server Error) a JSON je následující:
 ```JSON
 {
@@ -413,3 +413,59 @@ Pokud ID schůzky existuje, ale schůzka neexistuje (nebo tak něco), je respons
    "data":null
 }
 ```
+
+## **/next/ukoly.aspx**
+#### Klíč: `homeworks`
+Zobrazuje seznam úkolů (defaultně pouze "aktivní" a neoznačené jako hotové). Pro nás to je seznam těchto IDček. (A také je to pro nás jeden z nejhorších endpoitů, jelikož je to vlastně ASPX forma.) Jak získáme tyhle IDčka? Někde v HTML responsu je tabulka s atributem `id="grdukoly_DXMainTable"`. Ta má v sobě řádky s úkoly, ale má v sobě i řádek s "hlavičkou" tablky (normálně bych se divil, proč tu není `<thead>` a `<tbody>` (jako u jiných tabulek), ale jelikož to jsou Bakaláři, tak to jsem schopnej relativně "snadno" (resp. normálně) pochopit). Po zbavení se prvního řádku nám zbydou jen řádky, které chceme. Řádek vypadá takto:
+```html
+<tr id="grdukoly_DXDataRow0" title="zbývá méně než 7 dní." class="dxgvDataRow_NextBlueTheme celldo7 _electronic">
+   <td id="grdukoly_tccell0_0" class="dxgv">
+      <div style="display: inline-flex;">
+         <div class="homework-ico noicon"></div>
+         <div>*Datum odvzdání*</div>
+      </div>
+   </td>
+   <td class="dxgv">*Předmět*</td>
+   <td class="_checkUrl dxgv">*Zadání/Text/Informace úkolu*</td>
+   <td id="grdukoly_tccell0_3" class="dxgv">*Datum zadání*</td>
+   <td id="grdukoly_tccell0_4" class="overflowvisible dxgv">
+      <link href="css/komens_message_detail.css?v=20201023" rel="stylesheet" />
+      <div>
+         <span class="message_detail_header_paper_clips_menu attachment_dropdown _dropdown-onhover-target" style='{{if PocetFiles==0 }}visibility: hidden; {{/if}}'>
+            <span class="message_detail_header_paper_clips ico32-data-sponka"></span>
+            <span class="message_detail_header_paper_clips_files dropdown-content left-auto">
+               <!-- Seznam příloh ... (Tento komentář se v responsu nevyskytuje :) ) -->
+               <a href='getFile.aspx?f=*ID_SOUBORU*' target="_blank">
+                  <span class="attachment_name">*NÁZEV_SOUBORU*</span>
+                  <span class="attachment_size">Velikost souboru (v readable formátu)</span>
+               </a>
+               <!-- Konec seznamu příloh (Tento komentář se v responsu nevyskytuje :) ) -->
+            </span>
+         </span>
+      </div>
+   </td>
+   <td id="grdukoly_tccell0_5" class="dxgv">
+      <div class="checkbox text-center">
+         <input id="chkbox_*ID_ÚKOLU*" type="checkbox" value="False" onclick="markAsDone('*ID_ÚKOLU*', '*ID_STUDENTA*', $(this));" />
+         <label for="chkbox*ID_ÚKOLU*"></label>
+      </div>
+   </td>
+   <td id="grdukoly_tccell0_6" class="tac dxgv" style="border-right-width:0px;">
+      <span class="link fa fa-envelope-open-o padding-5" target='*ID_ÚKOLU*' onclick="showOdevzdani('*ID_ÚKOLU*', $(this));"></span>
+   </td>
+</tr>
+```
+Nás zajímá poslední sloupek (pro uživatele je to "vlaštovka" na odeslání úkolu). Ten totiž obsahuje atribut `target`, který má ID úkolu.
+
+## **/HomeWorks/MarkAsFinished**
+#### Klíč: `homeworks_done`
+Endpoint, který se stará o to, aby se úkol o(d)značil jako hotový. Normálně nedostupný. Posílá se POST request:
+```http
+POST /HomeWorks/MarkAsFinished HTTP/1.1
+homeworkId=*ID_UKOLU*&completed=*STAV*&studentId=*ID_STUDENTA*
+```
+Zvláštní je, že endpoint přijmá/vyžaduje ID studenta, avšak to vypadá, že se na něj nehledí. Parametr `"completed"` určuje, jaký stav se má "nastavit" (`true` je hotovo, `false` je nehotovo). Response vypadá takto:
+```json
+{"success":true,"error":"","data":null}
+```
+Další zvláštností je, že takto vypadá response i když je ID úkolu nebo ID studenta neplatný.

@@ -244,6 +244,10 @@ def Test2():
             print(f"Online schůzku {ID} se nepodařilo načíst")
         else:
             print(f"Online schůzka {ID} byla načtena")
+def Test3():
+    return API.GetHomeworksIDs()
+def Test4():
+    return API.MarkHomeworkAsDone(input("ID Úkolu: "), input("ID Studenta: "), True)
 
 
 Login()

@@ -50,7 +50,9 @@ Endpoints = {
     #"meetings":             "/Collaboration/OnlineMeeting",
     "meetings_overview":    "/Collaboration/OnlineMeeting/MeetingsOverview",
     "meetings_info":        "/Collaboration/OnlineMeeting/Detail/",
-    "user_info":            "/next/osobni_udaje.aspx"
+    "user_info":            "/next/osobni_udaje.aspx",
+    "homeworks":            "/next/ukoly.aspx",
+    "homeworks_done":       "/HomeWorks/MarkAsFinished"
 }
 
 
@@ -534,6 +536,33 @@ class BakalariAPI:
             for item in output:
                 self.Loot.AddLoot(item)
         return output
+
+    def GetHomeworksIDs(self) -> list[str]:
+        output = []
+        try:
+            response = self.Session.get(self.Server.GetEndpoint("homeworks"))
+        except requests.exceptions.RequestException as e:
+            raise ConnectionException from e
+        soup = BeautifulSoup(response.content, "html.parser")
+        homeworksList = soup.find(id="grdukoly_DXMainTable")("tr", recursive=False)
+        for homeworkRow in homeworksList[1:]: # První je hlavička tabulky (normálně bych se divil, proč tu není <thead> a <tbody> (jako u jiných tabulek), ale jsou to Bakaláři, takže to jsem schopnej pochopit)
+            output.append(homeworkRow("td", recursive=False)[-1].find("span")["target"])
+        return output
+    def MarkHomeworkAsDone(self, homeworkID: str, studentID: str, state: bool = True):
+        """
+        Varování: Nepoužívat! Tato metoda je zde jen dočasně (a kvůli testování exploitu)
+        Označí daný úkol jako hotový.
+        """
+        response = self.Session.post(self.Server.GetEndpoint("homeworks_done"), json={
+            "homeworkId": homeworkID,
+            "completed": state,
+            "studentId": studentID
+        })
+        return response.content
+        # if not response["d"]:
+        #     warnings.warn(f"Při potvrzování zprávy nebylo vráceno 'true', ale '{response['d']}'; Pravděpodobně nastala chyba; Celý objekt: {response}", UnexpectedBehaviour)
+
+
 
 class Looting:
     class JSONSerializer(json.JSONEncoder):
