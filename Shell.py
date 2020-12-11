@@ -161,7 +161,11 @@ class Shell:
         print("Možné příkazy:")
         for _, command in self.Commands.items():
             print("\t%-25s - %s" % (" | ".join([command.Name] + command.Aliases), command.ShortHelp))
-    
+        if self.ALLOW_PYTHON_EXEC:
+            if self.PYTHON_EXEC_PREFIX == None:
+                print("Jakýkoli příkaz (/vstup), který nebude rozeznán, bude interpretován jakožto Python")
+            else:
+                print(f"Jakýkoli příkaz (/vstup), který má na začátku '{self.PYTHON_EXEC_PREFIX}', bude interpretován jakožto Python")
     def ChangePrompt(self, text: str):
         self.Prompt = text
 

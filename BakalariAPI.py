@@ -1,13 +1,21 @@
 """Rádoby 'API' pro Bakaláře (resp. spíše scraper než API)"""
 from __future__ import annotations
-import warnings
-from datetime import datetime, timedelta
-from abc import ABC, abstractmethod
+
+import inspect
 import json
 import re
-import inspect
+import sys
+import warnings
+from abc import ABC, abstractmethod
+from enum import Enum                   # Není nutno instalovat pro Python 3.4+, předcházející verze: pip install enum34
+from datetime import datetime, timedelta
+
 import requests                         # Install
 from bs4 import BeautifulSoup           # Install
+try:
+    from selenium import webdriver      # Install + Download some WebDriver
+except ImportError:
+    print("Import Selenium se nezdařil a pravděpodobně není nainstalován, některé funkce budou nedostupné")
 
 class Exception(Exception):
     """Základní exception classa pro BakalariAPI
@@ -33,7 +41,7 @@ class SameID(Warning):
     Pozn.: Mohou být i totžný, ale není to jedna a ta samá instance (prostě OOP)"""
 
 
-LAST_SUPPORTED_VERSION = "1.35.1023.2"
+LAST_SUPPORTED_VERSION = "1.36.1207.1"
 
 
 Endpoints = {
@@ -54,6 +62,63 @@ Endpoints = {
     "homeworks":            "/next/ukoly.aspx",
     "homeworks_done":       "/HomeWorks/MarkAsFinished"
 }
+
+
+class Browser(Enum):
+    """
+    Enum prohlížečů/browserů podporovaných Seleniem
+    """
+    Chrome      = 0
+    Firefox     = 1
+    Edge        = 2
+    Safari      = 3
+    Opera       = 4
+    IE          = 5
+    Android     = 6
+    BlackBerry  = 7
+    PhantomJS   = 8
+    WebKitGTK   = 9
+    Remote      = 10
+class SeleniumHandler:
+    """
+    Classa obsahujcí nastavení pro Selenium
+    """
+    def __init__(self, browser: Browser, executablePath: str = "", params: dict = {}):
+        if "selenium" not in sys.modules:
+            raise ImportError(name="selenium")
+        self.Browser: Browser = browser
+        self.ExecutablePath: str = executablePath
+        self.Params: dict = params
+    def open(self) -> webdriver:
+        driver = None
+        path = {"executable_path":self.ExecutablePath} if self.ExecutablePath != "" and self.ExecutablePath != None else {}
+        if self.Browser == Browser.Chrome:
+            driver = webdriver.Chrome(**path, **self.Params)
+        elif self.Browser == Browser.Firefox:
+            driver = webdriver.Firefox(**path, **self.Params)
+        elif self.Browser == Browser.Edge:
+            driver = webdriver.Edge(**path, **self.Params)
+        elif self.Browser == Browser.Safari:
+            driver = webdriver.Safari(**path, **self.Params)
+        elif self.Browser == Browser.Opera:
+            driver = webdriver.Opera(**path, **self.Params)
+        elif self.Browser == Browser.IE:
+            driver = webdriver.Ie(**path, **self.Params)
+        elif self.Browser == Browser.Android:
+            driver = webdriver.Android(**self.Params)
+        elif self.Browser == Browser.BlackBerry:
+            # Potřebné parametry (asi :) ): device_password: PASSWORD, hostip: "169.254.0.1"
+            driver = webdriver.BlackBerry(**self.Params)
+        elif self.Browser == Browser.PhantomJS:
+            driver = webdriver.PhantomJS(**path, **self.Params)
+        elif self.Browser == Browser.WebKitGTK:
+            driver = webdriver.WebKitGTK(**path, **self.Params)
+        elif self.Browser == Browser.Remote:
+            # Potřebné parametry (asi :) ): command_executor: "http://127.0.0.1:4444/wd/hub"
+            driver = webdriver.Remote(**self.Params)
+        else:
+            raise ValueError()
+        return driver
 
 
 
@@ -143,33 +208,49 @@ class Server:
 class BakalariObject(ABC):
     def __init__(self, ID: str):
         self.ID = ID
-    
+    def __eq__(self, other: BakalariObject):
+        return self.ID == other.ID
     @abstractmethod
     def Format(self) -> str:
         pass
     
 
-class KomensFile(BakalariObject):
-    """Třída/objekt držící informace o Komens souboru/příloze na Bakalařích"""
-    def __init__(self, ID: str, name: str, size: int, type: str, komensID: str, path: str, instance: BakalariAPI = None):
-        super(KomensFile, self).__init__(ID)
+class BakalariFile(BakalariObject):
+    """Třída/objekt držící informace o souboru/příloze na Bakalařích"""
+    def __init__(self, ID: str, name: str, size: int, type: str = ""):
+        self.ID: str = ID
         self.Name: str = name
         self.Size: int = size
         self.Type: str = type
+
+    def GenerateURL(self, server: Server):
+        """Generuje (Sestaví) URL k souboru na serveru (SeverURL + Endpoint + ID_SOUBORU)"""
+        if type(server) is BakalariAPI:
+            server = server.Server
+        return server.GetEndpoint("file") + "?f=" + self.ID
+
+    def DownloadStream(self, instance: BakalariAPI) -> requests.Response:
+        """Otevře stream na pro daný soubor pomocí 'requests' modulu a vrátí requests.Response, kterým lze iterovat pomocí metody '.iter_lines()'"""
+        instance.Session.get(self.GenerateURL(instance.server), stream=True)
+
+    def Download(self, instance: BakalariAPI) -> bytes:
+        """Stáhne daný soubor a vrátí ho jakožto (typ) byty (Doporučuje se ale použít metoda '.DownloadStream()', jelikož se zde soubor ukládá do paměti a ne na disk)"""
+        return instance.Session.get(self.GenerateURL(instance.server)).content
+
+    def Format(self) -> str:
+        return (
+            f"ID: {self.ID}\n"
+            f"Název souboru: {self.Name}\n"
+            f"Typ: {self.Type}\n"
+            f"Velikost: {self.Size}"
+        )
+
+class KomensFile(BakalariFile):
+    """Třída/objekt držící informace o Komens souboru/příloze na Bakalařích"""
+    def __init__(self, ID: str, name: str, size: int, type: str, komensID: str, path: str):
+        super(KomensFile, self).__init__(ID, name, size, type)
         self.KomensID: str = komensID
         self.Path: str = path
-        self.Instance: BakalariAPI = instance
-    def __eq__(self, other: KomensFile):
-        return self.ID == other.ID
-    def GenerateURL(self):
-        """Generuje (Sestaví) URL k souboru na serveru (SeverURL + Endpoint + ID_SOUBORU)"""
-        return self.Instance.Server.GetEndpoint("file") + "?f=" + self.ID
-    def DownloadStream(self) -> requests.Response:
-        """Otevře stream na pro daný soubor pomocí 'requests' modulu a vrátí requests.Response, kterým lze iterovat pomocí metody '.iter_lines()'"""
-        self.Instance.Session.get(self.GenerateURL(), stream=True)
-    def Download(self) -> bytes:
-        """Stáhne daný soubor a vrátí ho jakožto (typ) byty (Doporučuje se ale použít metoda '.DownloadStream()', jelikož se zde soubor ukládá do paměti a ne na disk)"""
-        return self.Instance.Session.get(self.GenerateURL()).content
     def Format(self) -> str:
         return (
             f"ID: {self.ID}\n"
@@ -192,8 +273,6 @@ class Komens(BakalariObject):
         self.Type: str = type
         self.Files: list[KomensFile] = files
         self.Instance: BakalariAPI = instance
-    def __eq__(self, other: Komens):
-        return self.ID == other.ID
     # @property
     # def Content(self) -> str:
     #     return BeautifulSoup(self.RawContent, "html.parser").prettify()
@@ -229,8 +308,6 @@ class Grade(BakalariObject):
         self.OrderInClass: str = orderInClass
         self.Type: str = type
         #self.Target: str = target
-    def __eq__(self, other: Grade):
-        return self.ID == other.ID
     def Format(self):
         return (
             f"ID: {self.ID}\n"
@@ -279,22 +356,40 @@ class Student(BakalariObject):
         self.Name: str = name
         self.Surname: str = surname
         self.Class: str = _class
-    def __eq__(self, other: Student):
-        return self.ID == other.ID
     def Format(self) -> str:
         return f"{self.ID}: {self.Name} {self.Surname} ({self.Class})"
 
-
+class Homework(BakalariObject):
+    """Třída/objekt držící informace o domacím úkolu"""
+    def __init__(self, ID: str, submissionDate: datetime, subject: str, content: str, assignmentDate: datetime, done: bool):
+        super(Homework, self).__init__(ID)
+        self.SubmissionDate: datetime = submissionDate
+        self.Subject: str = subject
+        self.Content: str = content
+        self.AssignmentDate: datetime = assignmentDate
+        self.Done: bool = done
+    def Format(self) -> str:
+        return (
+            f"ID: {self.ID}\n"
+            f"Datum odevzdaní: {self.SubmissionDate.strftime('%d. %m.')}\n"
+            f"Datum zadání: {self.AssignmentDate.strftime('%d. %m.')}\n"
+            f"Předmět: {self.Subject}\n"
+            f"Hotovo? {'Ano' if self.Done else 'Ne'}\n"
+            "\n"
+            f"{GetText(BeautifulSoup(self.Content, 'html.parser'))}"
+        )
 
 class BakalariAPI:
     """Třída/objekt který obsluhuje ostatní komponenty"""
-    def __init__(self, server: Server, user: str, password: str, login: bool = True, looting: bool = True):
+    def __init__(self, server: Server, user: str, password: str, login: bool = True, looting: bool = True, seleniumSettings: SeleniumHandler = None):
         self.Server: Server = server
         self.User: str = user
         self.Password: str = password
         self.Session: requests.Session = requests.Session()
         self.Looting: bool = looting
         self.Loot: Looting = Looting() if self.Looting else None
+        self.Selenium: SeleniumHandler = seleniumSettings
+
         self.UserType: str = None
         self.UserHash: str = None
         if login:
@@ -411,7 +506,6 @@ class BakalariAPI:
                     soubor["type"],
                     soubor["idmsg"],
                     soubor["path"],
-                    self
                 )
                 soubory.append(komensFile)
                 if soubor["idmsg"] != ID:
@@ -561,6 +655,79 @@ class BakalariAPI:
         return response.content
         # if not response["d"]:
         #     warnings.warn(f"Při potvrzování zprávy nebylo vráceno 'true', ale '{response['d']}'; Pravděpodobně nastala chyba; Celý objekt: {response}", UnexpectedBehaviour)
+
+    def GetHomeworks(self, all: bool = False) -> list[Homework]:
+        output = []
+        driver = self.Selenium_Get()
+        driver.get(self.Server.GetEndpoint("homeworks"))
+        driver.find_element_by_xpath("//span[span/input[@id='cphmain_cbUnfinishedHomeworks_S']]").click()
+        # Proč jsem musel šáhnout po XPath? Protože Bakaláři :) Input, podle kterého to můžeme najít, tak je schovaný...
+        # A jeho parrent taky... A protože je to schovaný, tak s tím nemůžeme iteragovat... Takže potřebujeme parrenta
+        # parrenta toho input, který už vidět je a můžeme na něj kliknout :)
+
+        #TODO: all
+
+        # Vytáhnout zdroj
+        source = driver.page_source
+
+        # Parsnout a extahovat do class
+        soup = BeautifulSoup(source, "html.parser")
+        rows = soup.find(id="grdukoly_DXMainTable").find("tbody")("tr", recursive=False)
+        for row in rows[1:]: # První je hlavička tabulky (normálně bych se divil, proč tu není <thead> a <tbody> (jako u jiných tabulek), ale jsou to Bakaláři, takže to jsem schopnej pochopit)
+            tds = row("td")
+            datumOdevzdani = datetime.strptime(tds[0].find("div")("div")[1].text.strip(), "%d. %m.")
+            predmet = tds[1].text
+            zadani = tds[2].text
+            datumZadani = datetime.strptime(tds[3].text.strip(), "%d. %m.") # Asi bude potřebovat stripnout
+            #TODO: tds[4] = přílohy; tds[4]:
+            # <td id="grdukoly_tccell15_4" class="overflowvisible dxgv">
+			# 	<div>
+			# 	    <span class="message_detail_header_paper_clips_menu attachment_dropdown _dropdown-onhover-target" style="{{if PocetFiles==0 }}visibility: hidden; {{/if}}">
+            #             <span class="message_detail_header_paper_clips ico32-data-sponka"></span> <span class="message_detail_header_paper_clips_files dropdown-content left-auto">
+            #                 <a href="getFile.aspx?f=agepbdncjdfigmjcifpplpkojmoodnobgnalomephbboehdoicmhbcoeedoicloi" target="_blank">
+            #                     <span class="attachment_name">snek.png</span>
+            #                     <span class="attachment_size">284 KB</span>
+            #                 </a>
+			# 		    </span>
+			# 		</span>
+			# 	</div>
+			# </td>
+
+
+            hotovo = tds[5].find("div").find("input")["value"].lower() == "true"
+            ID = tds[-1].find("span")["target"] # = tds[6]
+
+            output.append(Homework(ID, datumOdevzdani, predmet, zadani, datumZadani, hotovo))
+            
+
+
+
+
+
+        # Zkrontrolovat zda je zde ještě další stránka... (možná udělat na začátku a případně ji zvětšit)
+        pass
+
+
+
+        driver.close()
+
+        return output
+
+
+
+    def Selenium_Get(self, login = True) -> webdriver:
+        driver = self.Selenium_Create()
+        self.Selenium_Login(driver)
+        return driver
+    def Selenium_Create(self) -> webdriver:
+        if self.Selenium == None:
+            raise ValueError("No Selenium handler/settings")
+        return self.Selenium.open()
+    def Selenium_Login(self, driver: webdriver):
+        driver.get(self.Server.GetEndpoint("login"))
+        driver.find_element_by_id("username").send_keys(self.User)
+        driver.find_element_by_id("password").send_keys(self.Password)
+        driver.find_element_by_id("loginButton").click()
 
 
 

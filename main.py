@@ -38,6 +38,22 @@ parser.add_argument(
     action="store_true",
     help="Spusť BakalariAPI shell (velmi se doporučuje skombinovat s '--interactive')"
 )
+parser.add_argument(
+    "-b", "--browser",
+    default="",
+    help="Specifikovat WebDriver prohlížeče, který použít"
+)
+parser.add_argument(
+    "-e", "--executablePath",
+    default=None,
+    help="Cesta ke spustitelnému webdriveru pro prohlížeč, který je specifikovaný pomocí '-b'"
+)
+parser.add_argument(
+    "-t", "--test",
+    type=int,
+    default=-1,
+    help="Test, který se má spustit (funguje pouze v kombinaci s '--shell')"
+)
 args = parser.parse_args()
 
 url = args.url
@@ -45,7 +61,13 @@ user = args.jmeno
 password = args.heslo
 interactive = args.interactive
 shell = args.shell
+testToRun = args.test
 
+seleniumSettings: BakalariAPI.SeleniumHandler = None
+if args.browser != "":
+    if args.browser not in BakalariAPI.Browser.__members__:
+        raise BakalariAPI.InputException(f"Prohlížeč '{args.browser}' nelze použít")
+    seleniumSettings = BakalariAPI.SeleniumHandler(BakalariAPI.Browser[args.browser], args.executablePath)
 
 def cls():
     os.system('cls' if os.name=='nt' else 'clear')
@@ -69,7 +91,7 @@ def InputCislo(text: str = "", default: int = None):
             return int(inpt)
         print("Špatná hodnota")
 
-API = None
+API: BakalariAPI.BakalariAPI = None
 
 def Login():
     global API
@@ -78,7 +100,9 @@ def Login():
             BakalariAPI.Server(url),
             user,
             password,
-            False
+            False,
+            True,
+            seleniumSettings
         )
     except BakalariAPI.InputException:
         print("Neplatné URL schéma; Končím")
@@ -185,6 +209,22 @@ def Studenti():
             cls()
 def Konec():
     API.Logout()
+def Ukoly():
+    print("Načítání úkolů...")
+    homeworks = API.GetHomeworks()
+    print("Úkoly načteny")
+    if interactive:
+        zobrazHotove = AnoNeDialog("Chte zobrazit již hotové úkoly? ")
+        cls()
+    for homework in homeworks:
+        if interactive and not zobrazHotove and homework.Done:
+            continue
+        print("*** Domácí úkol ***")
+        print(homework.Format())
+        print("\n\n")
+        if interactive:
+            input("Pro pokračování stiskni klávasu...")
+            cls()
 
 def RunTest(id):
     m = __import__(__name__)
@@ -248,6 +288,19 @@ def Test3():
     return API.GetHomeworksIDs()
 def Test4():
     return API.MarkHomeworkAsDone(input("ID Úkolu: "), input("ID Studenta: "), True)
+def Test5():
+    homeworks = API.GetHomeworks()
+    print("Úkoly načteny...")
+    zobrazHotove = AnoNeDialog("Chte zobrazit již hotové úkoly? ")
+    cls()
+    for homework in homeworks:
+        if not zobrazHotove and homework.Done:
+            continue
+        print("*** Domácí úkol ***")
+        print(homework.Format())
+        print("\n\n")
+        input("Pro pokračování stiskni klávasu...")
+        cls()
 
 
 Login()
@@ -295,6 +348,8 @@ if shell:
         "Spustí daný test",
         spreadArguments=True
     ))
+    if testToRun != -1:
+        RunTest(testToRun)
     shell.StartLoop()
     Konec()
     exit(0)
@@ -303,4 +358,5 @@ Komens()
 Znamky()
 Schuzky()
 Studenti()
+Ukoly()
 Konec()

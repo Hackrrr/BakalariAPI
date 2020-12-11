@@ -49,6 +49,7 @@ Navíc je tu ještě `BakalářiAPI` shell (což je `main.py` soubor). Ten je od
 - Získat online schůzky
 - Získat seznam studentů na škole (nejspíše se leakuje omylem, takže očekávám, že tohle v nějaké další verzi Bakaláří znemožní)
 - Získat známky
+- Získat "nadcházející" úkoly (pouze se Seleniem)
 - Získat komens zprávy
 - Potvrdit komens zprávy
 - Stahovat přílohy komens zprávám
@@ -63,10 +64,13 @@ Navíc je tu ještě `BakalářiAPI` shell (což je `main.py` soubor). Ten je od
 
 # Instalace/Zprovoznění
 `BakalářiAPI` bylo psáno v Pythonu 3.9 (nevím, ale nejspíše funguje na většinu 3.x verzí). Pokud nemáte Python, tak si ho buď nainstaluj (prostě to udělel LOL Čtyřhlav) nebo na tohle zapomeň. Nemyslím to ve zlém, ale já jsem rád, že jsem tohle vůbec udělal, natož tohle přepisovat do jiného jazyka. (Pokud ale přesto chceš jiný jazyk jak Python => viz 2. odstavec sekce *"Je tohle pro mě?"*.)<br>
-Pokud je Python 3 dostupný (pravděpodobně i s menšími úpravami Python 2 (ale *proč?!*, když už je EOL)), tak potřebujeme následující moduly/balíčky: `requests` a `BeatifulSoup4` (zkráceně `bs4`). Pro jejich instalaci využij `pip`:
+Pokud je Python 3 dostupný (pravděpodobně i s menšími úpravami Python 2 (ale *proč?!*, když už je EOL)), tak potřebujeme následující moduly/balíčky: `requests` a `BeatifulSoup4` (zkráceně `bs4`) a případně i `Selenium`, které zprostředkovává webdriver integraci (ale samotný `BakalariAPI` se objde i bez tohoto, ale některé funkce nebudou provozu schopné (např. extrahování domácích úkolů)). Navíc, pokud budeš používat Python starší jak 3.4, tak je potřeba stáhnout balíček `enum34`. Pro jejich instalaci využij `pip`:
 ```
-pip install requests bs4
+pip install requests bs4 selenium
 ```
+Pokud instalujete i `selenium`, tak je nutné ještě stáhnout webdriver pro prohlížeč, který je k dispozici - Jelikož každý prohlížeč má vlastní (nebo ho nemá), tak není žádný univertální (alespoň já o tom nevím a i kdyby, tak by to byl ohromný program "na nic") - Prostě vyhledej na internetu třeba "Chrome webdriver" či "Firefox webdriver" (myslím, že zrovna pro Firefox je to geecko webdriver). Každopádně aby to nebylo tak jednoduché, tak nelze poznat, jaký webdriver se používá a kde... Proto je zde classa `SeleniumSettings` pokud chcete používat samotné API a pro shell jsou zde flagy `-b`/`--browser` a `-e`/`--executablePath`. `-b` určuje pro jaký browser je webdriver určen ("chrome", "firefox", "opera", ...). `-e` určuje, kde se webdriver nachází - pokud tato flaga není přítomná, tak je pokus o vyhledání webdriveru v "executable path" (`PATH` proměnná v prostředí) (ale spíš bych doporučil cestu specifikovat).
+
+
 And here we go! Nyní stačí jen importovat `BakalariAPI` a můžeme začít získávat data!
 
 # Použití
