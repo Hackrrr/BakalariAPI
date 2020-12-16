@@ -89,13 +89,20 @@ class SeleniumHandler:
         self.Browser: Browser = browser
         self.ExecutablePath: str = executablePath
         self.Params: dict = params
-    def open(self) -> webdriver:
+    def open(self, trySilent: bool = True) -> webdriver:
+        #trySilent = False # Pouze pro debug
         driver = None
         path = {"executable_path":self.ExecutablePath} if self.ExecutablePath != "" and self.ExecutablePath != None else {}
         if self.Browser == Browser.Chrome:
-            driver = webdriver.Chrome(**path, **self.Params)
+            options = webdriver.ChromeOptions()
+            if trySilent:
+                options.set_headless(True)
+            driver = webdriver.Chrome(options=options, **path, **self.Params)
         elif self.Browser == Browser.Firefox:
-            driver = webdriver.Firefox(**path, **self.Params)
+            options = webdriver.FirefoxOptions()
+            if trySilent:
+                options.set_headless(True)
+            driver = webdriver.Firefox(options=options, **path, **self.Params)
         elif self.Browser == Browser.Edge:
             driver = webdriver.Edge(**path, **self.Params)
         elif self.Browser == Browser.Safari:
@@ -103,7 +110,8 @@ class SeleniumHandler:
         elif self.Browser == Browser.Opera:
             driver = webdriver.Opera(**path, **self.Params)
         elif self.Browser == Browser.IE:
-            driver = webdriver.Ie(**path, **self.Params)
+            options = webdriver.IeOptions()
+            driver = webdriver.Ie(options=options, **path, **self.Params)
         elif self.Browser == Browser.Android:
             driver = webdriver.Android(**self.Params)
         elif self.Browser == Browser.BlackBerry:
@@ -260,6 +268,8 @@ class KomensFile(BakalariFile):
             f"ID přidružené zprávy: {self.KomensID}\n"
             f"(Nepoužitelná) Cesta: {self.Path}\n"
         )
+#TODO: HomeworkFile (s bindem na úkol...)
+
 
 class Komens(BakalariObject):
     """Třída/objekt držící informace o Komens (zprávě/zprách)"""
@@ -368,6 +378,12 @@ class Homework(BakalariObject):
         self.Content: str = content
         self.AssignmentDate: datetime = assignmentDate
         self.Done: bool = done
+    def MarkAsDone(self, instance: BakalariAPI, value: bool = True):
+        instance.Session.post(instance.Server.GetEndpoint("homeworks_done"), json={
+            "homeworkId": self.ID,
+            "completed": value
+            #"studentId": studentID
+        })
     def Format(self) -> str:
         return (
             f"ID: {self.ID}\n"
@@ -444,7 +460,7 @@ class BakalariAPI:
         except requests.exceptions.RequestException as e:
             raise ConnectionException from e
         soup = BeautifulSoup(response.content, "html.parser")
-        znamkyList = soup.find(id="cphmain_DivBySubject")("div", attrs={"data-clasif": True})
+        znamkyList = soup("div", attrs={"data-clasif": True})
         for znamka in znamkyList:
             data = json.loads(znamka["data-clasif"])
             output.append(Grade(
@@ -642,23 +658,14 @@ class BakalariAPI:
         for homeworkRow in homeworksList[1:]: # První je hlavička tabulky (normálně bych se divil, proč tu není <thead> a <tbody> (jako u jiných tabulek), ale jsou to Bakaláři, takže to jsem schopnej pochopit)
             output.append(homeworkRow("td", recursive=False)[-1].find("span")["target"])
         return output
-    def MarkHomeworkAsDone(self, homeworkID: str, studentID: str, state: bool = True):
-        """
-        Varování: Nepoužívat! Tato metoda je zde jen dočasně (a kvůli testování exploitu)
-        Označí daný úkol jako hotový.
-        """
-        response = self.Session.post(self.Server.GetEndpoint("homeworks_done"), json={
-            "homeworkId": homeworkID,
-            "completed": state,
-            "studentId": studentID
-        })
-        return response.content
-        # if not response["d"]:
-        #     warnings.warn(f"Při potvrzování zprávy nebylo vráceno 'true', ale '{response['d']}'; Pravděpodobně nastala chyba; Celý objekt: {response}", UnexpectedBehaviour)
+        
+    def GetHomeworks(self, all: bool = False, driver: webdriver = None) -> list[Homework]:
+        newDriver = False
+        if driver == None:
+            driver = self.Selenium_GetLoggedSession()
+            newDriver = True
 
-    def GetHomeworks(self, all: bool = False) -> list[Homework]:
         output = []
-        driver = self.Selenium_Get()
         driver.get(self.Server.GetEndpoint("homeworks"))
         driver.find_element_by_xpath("//span[span/input[@id='cphmain_cbUnfinishedHomeworks_S']]").click()
         # Proč jsem musel šáhnout po XPath? Protože Bakaláři :) Input, podle kterého to můžeme najít, tak je schovaný...
@@ -708,26 +715,27 @@ class BakalariAPI:
         pass
 
 
-
-        driver.close()
+        if newDriver:
+            driver.close()
 
         return output
 
 
 
-    def Selenium_Get(self, login = True) -> webdriver:
-        driver = self.Selenium_Create()
+    def Selenium_GetLoggedSession(self, login: bool = True, trySilent: bool = True) -> webdriver:
+        driver = self.Selenium_Create(trySilent)
         self.Selenium_Login(driver)
         return driver
-    def Selenium_Create(self) -> webdriver:
+    def Selenium_Create(self, trySilent: bool = True) -> webdriver:
         if self.Selenium == None:
             raise ValueError("No Selenium handler/settings")
-        return self.Selenium.open()
-    def Selenium_Login(self, driver: webdriver):
+        return self.Selenium.open(trySilent)
+    def Selenium_Login(self, driver: webdriver) -> bool:
         driver.get(self.Server.GetEndpoint("login"))
         driver.find_element_by_id("username").send_keys(self.User)
         driver.find_element_by_id("password").send_keys(self.Password)
         driver.find_element_by_id("loginButton").click()
+        return driver.current_url == self.Server.GetEndpoint("dashboard")
 
 
 

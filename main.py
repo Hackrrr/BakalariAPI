@@ -210,8 +210,14 @@ def Studenti():
 def Konec():
     API.Logout()
 def Ukoly():
+    print("Vytvářím Selenium session...")
+    driver = API.Selenium_Create()
+    print(f"Selenium session vytvořen, přihlašuji jako {user}... (Session ID: {driver.session_id}")
+    if not API.Selenium_Login(driver):
+        print("Zdá se, že přihlášení přes Selenium session se nezdařilo... Jsou správně přihlašovací údaje?")
+    print("Úspěšně přihlášen přes Selenium session")
     print("Načítání úkolů...")
-    homeworks = API.GetHomeworks()
+    homeworks = API.GetHomeworks(driver=driver)
     print("Úkoly načteny")
     if interactive:
         zobrazHotove = AnoNeDialog("Chte zobrazit již hotové úkoly? ")
@@ -223,8 +229,12 @@ def Ukoly():
         print(homework.Format())
         print("\n\n")
         if interactive:
+            if not homework.Done and AnoNeDialog("Úkol není označen jako hotov... Chcete ho označit jako hotový? "):
+                homework.MarkAsDone(API)
+                print("Úkol byl označen jako hotový")
             input("Pro pokračování stiskni klávasu...")
             cls()
+    driver.close()
 
 def RunTest(id):
     m = __import__(__name__)
@@ -287,7 +297,8 @@ def Test2():
 def Test3():
     return API.GetHomeworksIDs()
 def Test4():
-    return API.MarkHomeworkAsDone(input("ID Úkolu: "), input("ID Studenta: "), True)
+    print("Test byl přestal být podporován a byl zrušen...")
+    #return API.MarkHomeworkAsDone(input("ID Úkolu: "), input("ID Studenta: "), True)
 def Test5():
     homeworks = API.GetHomeworks()
     print("Úkoly načteny...")
@@ -348,6 +359,13 @@ if shell:
         "Spustí daný test",
         spreadArguments=True
     ))
+    shell.AddCommand(Shell.Command(
+        "ukoly",
+        Ukoly,
+        shortHelp="Zobrazí úkoly",
+        aliases=["úkoly"]
+    ))
+
     if testToRun != -1:
         RunTest(testToRun)
     shell.StartLoop()
