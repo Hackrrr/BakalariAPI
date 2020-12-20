@@ -7,7 +7,7 @@ Zatím toho tady moc není, ale teď toho víc psát nehodlám... Píšu to už 
 - Kompletně enpointy, které `BakalářiAPI` používá (kromě domácích úkolů, ale pokud tomu rozumíš, tak si myslím, že to pochopíš)
 - A to je vše... Nic moc, že? Ale věř mi - napsat to byl pain LUL
 
-# Zprovozoznění a instalce aneb Co `BakalářiAPI` používajá a proč to potřebují?
+# Zprovozoznění a instalce aneb Co `BakalářiAPI` používají a proč to potřebují?
 
 ## TL;DR
 Nechceš to vše číst? V pořádku, já taky často nečtu tu hromadu nepodstatných věcí jako například takhle dlouhá a nesmyslná věta, která actually nemá žádnej význam jelikož molekuly jsou vyrobené z kamene... Anyways - potřebujeme nainstalovat `requests` a `bs4`, tedy napiš do příkazového řádku/terminálu toto:
