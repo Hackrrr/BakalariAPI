@@ -37,6 +37,8 @@ Jak jsem již psal, tohle je snaha udělat nějaký přístupný API pro všechn
 
 A pokud si chceš udělat vlastní `BakalářiAPI`, let's go for it. Tohle je Open Source, takže můžeš se podívat na kód, jak se řeší určitý věci a nebo se podívat do poznámek, co jsou tady taky - viz složka Bakaláři.
 
+BTW - Co vím, tak minimální verze Pythonu je 3.7 (konkrétněji 3.7.0b1), protože `BakalářiAPI` používá anotace (z `__future__` modulu) (a na funkcionalitu, kterou toto poskytuje, tak jsem zvyklý z ostatních jazyků :) ). Ale samozřejmě je dost pravděpodobné, že se mýlím - Nezkoušel jsem předchozí verze, tudíž nevím, jestli to opravdu nefunguje a pokud z nějakého záhadného důvodu nechceš/nemůžeš použít novější Python, tak bych se i vsadil, že najdeš způsob, jak to zprovoznit.
+
 
 **Ale neříkej, že jsem tě nevaroval - Je to extrémní pain.**
 
@@ -79,4 +81,4 @@ Navíc je tu ještě `BakalářiAPI` shell (což je `main.py` soubor). Ten je od
 - Připojení k (blízkým) nadcházejícím schůzkám
 
 # Zaujal jsem tě?
-Ano? Tak to jsem rád... Smůla, že vůbec nevíš, jak tohle ~~použít~~ spustit... Ale zkus se podívat do složky "Dokumentace". :)
+Ano? Tak to jsem rád... Smůla, že vůbec nevíš, jak tohle ~~použít~~ spustit... Ale zkus se podívat do "Dokumentace". :)

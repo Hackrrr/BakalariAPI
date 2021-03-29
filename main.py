@@ -1,7 +1,7 @@
 import argparse
 import os
 import requests
-import BakalariAPI
+from bakalari import BakalariAPI, LAST_SUPPORTED_VERSION, Browser, SeleniumHandler
 import Shell
 from datetime import datetime, timedelta, timezone # Here it comes... Timezone hadndling first feel PepeLaugh
 # Hej! Moje budoucí já... Já vím, že se sem jednou podíváš... Takže až ta chvíle nastane, tak si vzpomeň, že za 100 let budou tenhle samej problém
@@ -27,18 +27,6 @@ parser.add_argument(
     help="Přihlašovací jméno"
 )
 parser.add_argument(
-    "-i", "--interactive",
-    default=False,
-    action="store_true",
-    help="Interaktivní - Vyžaduje interakci po zobrazení zprávy/známky/..."
-)
-parser.add_argument(
-    "-s", "--shell",
-    default=False,
-    action="store_true",
-    help="Spusť BakalariAPI shell (velmi se doporučuje skombinovat s '--interactive')"
-)
-parser.add_argument(
     "-b", "--browser",
     default="",
     help="Specifikovat WebDriver prohlížeče, který použít"
@@ -59,27 +47,23 @@ args = parser.parse_args()
 url = args.url
 user = args.jmeno
 password = args.heslo
-interactive = args.interactive
-shell = args.shell
 testToRun = args.test
 
-seleniumSettings: BakalariAPI.SeleniumHandler = None
+seleniumSettings: SeleniumHandler = None
 if args.browser != "":
-    if args.browser not in BakalariAPI.Browser.__members__:
-        raise BakalariAPI.InputException(f"Prohlížeč '{args.browser}' nelze použít")
-    seleniumSettings = BakalariAPI.SeleniumHandler(BakalariAPI.Browser[args.browser], args.executablePath)
+    seleniumSettings = SeleniumHandler(Browser[args.browser.upper()], args.executablePath)
 
 def cls():
     os.system('cls' if os.name=='nt' else 'clear')
-def AnoNeDialog(text: str = "", help: bool = True) -> bool:
+def AnoNeDialog(text: str = "", help_text: bool = True) -> bool:
     while True:
-        inputLetter = input(text + ("Ano/Ne: " if help else "")) # ano/yes/1 / ne/no/0
-        if len(inputLetter) == 0:
+        input_letter = input(text + ("Ano/Ne: " if help_text else "")) # ano/yes/1 / ne/no/0
+        if len(input_letter) == 0:
             continue
-        inputLetter = inputLetter[0].lower()
-        if inputLetter in "ay1":
+        input_letter = input_letter[0].lower()
+        if input_letter in "ay1":
             return True
-        elif inputLetter in "n0":
+        elif input_letter in "n0":
             return False
         print("Špatná hodnota")
 def InputCislo(text: str = "", default: int = None):
@@ -91,150 +75,124 @@ def InputCislo(text: str = "", default: int = None):
             return int(inpt)
         print("Špatná hodnota")
 
-API: BakalariAPI.BakalariAPI = None
+API: BakalariAPI = BakalariAPI(url, user, password, seleniumSettings)
 
 def Login():
     global API
-    try:
-        API = BakalariAPI.BakalariAPI(
-            BakalariAPI.Server(url),
-            user,
-            password,
-            False,
-            True,
-            seleniumSettings
-        )
-    except BakalariAPI.InputException:
-        print("Neplatné URL schéma; Končím")
-        exit(1)
+
     print(f"Kontrola stavu serveru/webu... ({url})")
-    if not API.Server.Running():
+    if not API.is_server_running():
         print("Severver/web (pravděpodobně) neběží; Končím")
         exit(1)
     print("Sever/web běží")
-    print(f"Pokus o přihlášení jako '{user}'")
-    try:
-        API.Login(False)
-    except BakalariAPI.AuthenticationException:
-        print("Nepovedlo se přihlásit (nesprávné přihlašovací údaje)")
-        exit(1)
-    print("Přihlášení úspěšné")
-
+    print(f"Kontrola přihlašovacích údajů pro uživatele '{user}'")
+    if not API.is_login_valid():
+        print("Přihlašovací údaje jsou neplatné")
+    print("Přihlašovací údaje ověřeny a jsou správné")
     print("Nastavuji...")
-    API.Init()
+    API.init()
     print("Nastaveno")
     print(
         "Základní informace:\n"
-        f"  Typ uživatele: {API.UserType}\n"
-        f"  Uživatelký hash: {API.UserHash}\n"
-        f"  Verze Bakalářů: {API.Server.Version}\n"
-        f"  Datum verze Bakalářů: {API.Server.VersionDate.strftime('%d. %m. %Y')}\n"
-        f"  Evidenční číslo verze Bakalářů: {API.Server.RegistrationNumber}\n"
+        f"  Typ uživatele: {API.user_info.type}\n"
+        f"  Uživatelký hash: {API.user_info.hash}\n"
+        f"  Verze Bakalářů: {API.server_info.version}\n"
+        f"  Datum verze Bakalářů: {API.server_info.version_date.strftime('%d. %m. %Y')}\n"
+        f"  Evidenční číslo verze Bakalářů: {API.server_info.evid_number}\n"
     )
-    if API.Server.Version != BakalariAPI.LAST_SUPPORTED_VERSION:
+    if API.server_info.version != LAST_SUPPORTED_VERSION:
         print("*** Jiná verze Bakalářů! Všechny funkce nemusejí fungovat správně! ***")
-    if interactive:
-        input("Pro pokračování stiskni klávasu...")
+    input("Pro pokračování stiskni klávasu...")
 def Komens():
     print("Získávám IDčka zpráv...")
-    zpravyIDs = API.GetKomensIDs()
+    zpravyIDs = API.get_komens_IDs()
     zpravy = []
     print("IDčka zpráv získany")
     for ID in zpravyIDs:
         print(f"Získávám Komens zprávu {ID}")
-        zpravy.append(API.GetKomens(ID))
+        zpravy.append(API.get_komens(ID))
     print("Zprávy získány, zobrazuji...")
-    if interactive:
-        cls()
+    cls()
     for zprava in zpravy:
-        # try:
         print("*** Zpráva ***")
-        print(zprava.Format())
+        print(zprava.format())
         print("\n\n\n")
-        if interactive:
-            if zprava.NeedsConfirm and not zprava.Confirmed and AnoNeDialog("Zpráva vyžaduje potvrzení. Chcete potvrdit přečtení? "):
-                print("Potvrzuji zprávu...")
-                zprava.Confirm()
-                print("Zpráva potvrzena")
-            input("Pro pokračování stiskni klávasu...")
-            cls()
+        if zprava.need_confirm and not zprava.confirmed and AnoNeDialog("Zpráva vyžaduje potvrzení. Chcete potvrdit přečtení? "):
+            print("Potvrzuji zprávu...")
+            zprava.confirm(API)
+            print("Zpráva potvrzena")
+        input("Pro pokračování stiskni klávasu...")
+        cls()
 def Znamky():
     print("Získávám známky...")
-    znamky = API.GetGrades()
+    znamky = API.get_grades()
     print("Známky získány, zobrazuji...")
-    if interactive:
-        cls()
+    cls()
     for znamka in znamky:
         print("*** Známka ***")
-        print(znamka.Format())
+        print(znamka.format())
         print("\n")
-        if interactive:
-            input("Pro pokračování stiskni klávasu...")
-            cls()
+        input("Pro pokračování stiskni klávasu...")
+        cls()
 def Schuzky():
     print("Získávám IDčka online schůzek")
-    schuzkyIDs = API.GetMeetingsIDs()
+    schuzkyIDs = API.get_future_meetings_IDs()
     print("IDčka online schůzek získany")
     schuzky = []
     for ID in schuzkyIDs:
         print(f"Získávám online schůzku {ID}")
-        schuzky.append(API.GetMeeting(ID))
+        schuzky.append(API.get_meeting(ID))
     print("Online schůzky získány, zobrazuji...")
-    if interactive:
-        cls()
+    cls()
     for schuzka in schuzky:
         print("*** Online Schůzka ***")
-        print(schuzka.Format())
+        print(schuzka.format())
         print("\n\n")
-        if interactive:
-            diff = schuzka.StartTime - datetime.now(timezone.utc).astimezone()
-            if diff <= timedelta(minutes=30) and AnoNeDialog(f"Chcete otevřít online schůzku? Shůzka začíná do 30ti minut... "):
-                print("Otevírám...")
-                webbrowser.open_new_tab(schuzka.JoinURL)
-            input("Pro pokračování stiskni klávasu...")
-            cls()
+        diff = schuzka.start_time - datetime.now(timezone.utc).astimezone()
+        if diff <= timedelta(minutes=30) and AnoNeDialog("Chcete otevřít online schůzku? Shůzka začíná do 30ti minut... "):
+            print("Otevírám...")
+            webbrowser.open_new_tab(schuzka.joinURL)
+        input("Pro pokračování stiskni klávasu...")
+        cls()
 def Studenti():
-    if interactive and len(API.Loot.Data["Student"]) and AnoNeDialog("Podařilo získat seznam studentů. Chcete jej zobrazit? "):
+    if len(API.looting.Data["Student"]) and AnoNeDialog("Podařilo získat seznam studentů. Chcete jej zobrazit? "):
         count = InputCislo("Kolik výsledků najednou? (Výchozí 25) ", 25)
         offset = 0
-        length = len(API.Loot.Data["Student"])
+        length = len(API.looting.Data["Student"])
         cls()
         while offset < length:
             for _ in range(count):
                 if (offset >= length):
                     break
-                print(API.Loot.Data["Student"][offset].Format())
+                print(API.looting.Data["Student"][offset].format())
                 offset += 1
             input(f"Pro pokračování stiskni klávasu... (Již zobrazeno {offset} výsledků z {length})")
             cls()
 def Konec():
-    API.Logout()
+    API.kill()
 def Ukoly():
-    print("Vytvářím Selenium session...")
-    driver = API.Selenium_Create()
-    print(f"Selenium session vytvořen, přihlašuji jako {user}... (Session ID: {driver.session_id}")
-    if not API.Selenium_Login(driver):
-        print("Zdá se, že přihlášení přes Selenium session se nezdařilo... Jsou správně přihlašovací údaje?")
-    print("Úspěšně přihlášen přes Selenium session")
+    # print("Vytvářím Selenium session...")
+    # driver = API.Selenium_Create()
+    # print(f"Selenium session vytvořen, přihlašuji jako {user}... (Session ID: {driver.session_id})")
+    # if not API.Selenium_Login(driver):
+    #     print("Zdá se, že přihlášení přes Selenium session se nezdařilo... Jsou správně přihlašovací údaje?")
+    # print("Úspěšně přihlášen přes Selenium session")
     print("Načítání úkolů...")
-    homeworks = API.GetHomeworks(driver=driver)
+    homeworks = API.get_homeworks(False)
     print("Úkoly načteny")
-    if interactive:
-        zobrazHotove = AnoNeDialog("Chte zobrazit již hotové úkoly? ")
-        cls()
+    zobrazHotove = AnoNeDialog("Chte zobrazit již hotové úkoly? ")
+    cls()
     for homework in homeworks:
-        if interactive and not zobrazHotove and homework.Done:
+        if not zobrazHotove and homework.done:
             continue
         print("*** Domácí úkol ***")
-        print(homework.Format())
+        print(homework.format())
         print("\n\n")
-        if interactive:
-            if not homework.Done and AnoNeDialog("Úkol není označen jako hotov... Chcete ho označit jako hotový? "):
-                homework.MarkAsDone(API)
-                print("Úkol byl označen jako hotový")
-            input("Pro pokračování stiskni klávasu...")
-            cls()
-    driver.close()
+        if not homework.done and AnoNeDialog("Úkol není označen jako hotov... Chcete ho označit jako hotový? "):
+            homework.mark_as_done(API)
+            print("Úkol byl označen jako hotový")
+        input("Pro pokračování stiskni klávasu...")
+        cls()
 
 def RunTest(id):
     m = __import__(__name__)
@@ -290,7 +248,7 @@ def Test2():
     print("IDčka online schůzek získany")
     for ID in IDs:
         print(f"Získávám online schůzku {ID}")
-        if API.GetMeeting(ID) == None:
+        if API.GetMeeting(ID) is None:
             print(f"Online schůzku {ID} se nepodařilo načíst")
         else:
             print(f"Online schůzka {ID} byla načtena")
@@ -316,65 +274,56 @@ def Test5():
 
 Login()
 
-if shell:
-    cls()
-    print("Shell aktivní")
-    shell = Shell.Shell(
-        "BakalariAPI Shell>",
-        allowPythonExec=True,
-        pythonExecPrefix=" "
-    )
-    shell.AddCommand(Shell.Command(
-        "clear",
-        cls,
-        shortHelp="Vyčistí konzoli/terminál",
-        aliases=["cls"]
-    ))
-    shell.AddCommand(Shell.Command(
-        "komens",
-        Komens,
-        shortHelp="Extrahuje a zobrazí komens zprávy"
-    ))
-    shell.AddCommand(Shell.Command(
-        "znamky",
-        Znamky,
-        shortHelp="Extrahuje a zobrazí známky"
-    ))
-    shell.AddCommand(Shell.Command(
-        "schuzky",
-        Schuzky,
-        shortHelp="Extrahuje a zobrazí (nadcházející) schůzky"
-    ))
-    shell.AddCommand(Shell.Command(
-        "studenti",
-        Studenti,
-        shortHelp="Zobrazí studenty"
-    ))
-    parser = Shell.ShellArgumentParser()
-    parser.add_argument("id")
-    shell.AddCommand(Shell.Command(
-        "test",
-        RunTest,
-        parser,
-        "Spustí daný test",
-        spreadArguments=True
-    ))
-    shell.AddCommand(Shell.Command(
-        "ukoly",
-        Ukoly,
-        shortHelp="Zobrazí úkoly",
-        aliases=["úkoly"]
-    ))
+cls()
+print("Shell aktivní")
+shell = Shell.Shell(
+    "BakalariAPI Shell>",
+    allowPythonExec=True,
+    pythonExecPrefix=" "
+)
+shell.AddCommand(Shell.Command(
+    "clear",
+    cls,
+    shortHelp="Vyčistí konzoli/terminál",
+    aliases=["cls"]
+))
+shell.AddCommand(Shell.Command(
+    "komens",
+    Komens,
+    shortHelp="Extrahuje a zobrazí komens zprávy"
+))
+shell.AddCommand(Shell.Command(
+    "znamky",
+    Znamky,
+    shortHelp="Extrahuje a zobrazí známky"
+))
+shell.AddCommand(Shell.Command(
+    "schuzky",
+    Schuzky,
+    shortHelp="Extrahuje a zobrazí (nadcházející) schůzky"
+))
+shell.AddCommand(Shell.Command(
+    "studenti",
+    Studenti,
+    shortHelp="Zobrazí studenty"
+))
+parser = Shell.ShellArgumentParser()
+parser.add_argument("id")
+shell.AddCommand(Shell.Command(
+    "test",
+    RunTest,
+    parser,
+    "Spustí daný test",
+    spreadArguments=True
+))
+shell.AddCommand(Shell.Command(
+    "ukoly",
+    Ukoly,
+    shortHelp="Zobrazí úkoly",
+    aliases=["úkoly"]
+))
 
-    if testToRun != -1:
-        RunTest(testToRun)
-    shell.StartLoop()
-    Konec()
-    exit(0)
-
-Komens()
-Znamky()
-Schuzky()
-Studenti()
-Ukoly()
+if testToRun != -1:
+    RunTest(testToRun)
+shell.StartLoop()
 Konec()

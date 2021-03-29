@@ -26,7 +26,7 @@ class Command:
     # def Invoke(self, argumentList: list):
     #     self(*argumentList)
     def __call__(self, *args):
-        if self.Argparser == None:
+        if self.Argparser is None:
             self.Callback()
         else:
             try:
@@ -72,7 +72,7 @@ class Shell:
         for command in commands:
             self.AddCommand(command)
 
-        if generateCommands == None:
+        if generateCommands is None:
             generateCommands = []
         
         for command in generateCommands:
@@ -128,7 +128,7 @@ class Shell:
             if first in self.Commands:
                 self.Commands[first](*parsed)
             else:
-                if self.ALLOW_PYTHON_EXEC and self.PYTHON_EXEC_PREFIX == None:
+                if self.ALLOW_PYTHON_EXEC and self.PYTHON_EXEC_PREFIX is None:
                     PythonExec(string)
                 else:
                     print(f"Neznámý příkaz '{string}'\nZkus napsat 'help' nebo '?' pro nápovědu")
@@ -147,7 +147,7 @@ class Shell:
             else:
                 candidatesCount = len(candidates)
                 if candidatesCount == 0:
-                    if self.ALLOW_PYTHON_EXEC and self.PYTHON_EXEC_PREFIX == None:
+                    if self.ALLOW_PYTHON_EXEC and self.PYTHON_EXEC_PREFIX is None:
                         PythonExec(string)
                     else:
                         print(f"Neznámý příkaz '{string}'\nZkus napsat 'help' nebo '?' pro nápovědu")
@@ -163,7 +163,7 @@ class Shell:
         for _, command in self.Commands.items():
             print("\t%-25s - %s" % (" | ".join([command.Name] + command.Aliases), command.ShortHelp))
         if self.ALLOW_PYTHON_EXEC:
-            if self.PYTHON_EXEC_PREFIX == None:
+            if self.PYTHON_EXEC_PREFIX is None:
                 print("Jakýkoli příkaz (/vstup), který nebude rozeznán, bude interpretován jakožto Python")
             else:
                 print(f"Jakýkoli příkaz (/vstup), který má na začátku '{self.PYTHON_EXEC_PREFIX}', bude interpretován jakožto Python")
@@ -210,6 +210,7 @@ def PythonExec(string: str):
     # print(f"Buffer: {buffer}")
 
     #TODO: Better PythonExec() (filter None value / better way than this print hack)
+    #TODO: Execution context
     try:
         exec(f"print({string})")
     except Exception as e:

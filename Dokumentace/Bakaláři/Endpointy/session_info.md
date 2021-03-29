@@ -34,5 +34,7 @@ Popis klíčů:
 - `remainingTime` - Zbývající životnost současné session v sekundách; Obsahuje i zlomky sekundy na 7 míst
 - `sessionDuration` - Maximální životnost session v minutách
 
+Pokud není uživatel přihlášen, `remainingTime` i `sessionDuration` mají hodnotu `0.0` (`success` má pořád hodnotu `true` a `error` je prázdný).
+
 # Výzkum
 Endpoint nalezn při odchytu provozu při "neaktivitě".

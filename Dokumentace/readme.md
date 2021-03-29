@@ -14,7 +14,7 @@ Nechceš to vše číst? V pořádku, já taky často nečtu tu hromadu nepodsta
 ```
 pip install requests bs4
 ```
-Ale počítej s tím, že pár věcí nebude fungovat (například získání úkolů)...
+Ale počítej s tím, že pár věcí nebude fungovat (například získání úkolů) - pokud chceš i tyhle featury, budeš se muset trochu začíst...
 
 ## Requests
 `Requests` je balíček obsahující základní metody pro (webové) requesty - pro `BakalářiAPI` to jsou hlavně metody GET a POST. Navíc je zde možnost vytvořit sessiony - to znamená, že se za nás stará například o cookies. Pokud máte zkušenosti s `urllib3` či `urllib2`, tak tohle by měl být takový wraper kolem těchto knihoven. (Nebo alternativa k `httplib3`/`httplib2`.)
@@ -72,7 +72,7 @@ Ok, ok, ok... Tak se zase uklidníme...
 Jelikož `BakalářiAPI` bylo psáno na Python 3.9 a já velice rád experimentální (a nové) featury (a pak toho lituji... PepeLaugh ), tak je možné, že pár věcí nebude fungovat. Zatím vím jen o dvou chybách kompatibility:
 
 ### enum34
-Pokud bude chyba vypadat nějak takto: `NameError: name 'Enum' is not defined`, tak pravděpodobně používaš Python starší jak 3.4 a chybí podpora enumerací. `BakalářiAPI` je používá (zatím) jen pro prohlížeče kvůli Seleniu. Fix by měl být jednoduchý - stačí nainstlovat balíček `enum34`:
+Pokud bude chyba vypadat nějak takto: `NameError: name 'Enum' is not defined`, tak pravděpodobně používaš Python starší jak 3.4 a chybí podpora enumerací (já psal, že máš použít minimálně 3.7 :) ). `BakalářiAPI` je používá (zatím) jen pro prohlížeče kvůli Seleniu. Fix by měl být jednoduchý - stačí nainstlovat balíček `enum34`:
 ```
 pip install enum34
 ```
