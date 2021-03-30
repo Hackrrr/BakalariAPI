@@ -13,6 +13,7 @@ import sys
 from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
+from multiprocessing import Lock
 from typing import Type
 
 import requests
@@ -215,6 +216,7 @@ class SessionManager:
     """
     #TODO: Thread-safe session getter (because we really don't want to have "shared" session :) )
     def __init__(self, ref: BakalariAPI):
+        self.__lock = Lock()
         self.bakalariAPI: BakalariAPI = ref
         self.sessions: dict[str, list[BakalariSession]] = {}
         atexit.register(self.kill_all, False)
@@ -245,12 +247,16 @@ class SessionManager:
             filter_busy:
                 Ignorovat zaneprázdněné sessiony při hledání? (Default: True)
         """
-        if session_class not in self.sessions:
-            return None
-        for session in self.sessions[session_class]:
-            if not (filter_busy and session.busy):
-                session.busy = set_busy
-                return session
+        self.__lock.acquire()
+        try:
+            if session_class not in self.sessions:
+                return None
+            for session in self.sessions[session_class]:
+                if not (filter_busy and session.busy):
+                    session.busy = set_busy
+                    return session
+        finally:
+            self.__lock.release()
         return None
     def get_session_or_create(self, session_class: Type[BakalariSession], set_busy = True, filter_busy = True) -> BakalariSession:
         """Navrátí (volnou) session daného typu. Pokud taková neexistuje, vrátí None.
@@ -304,15 +310,19 @@ class SessionManager:
             session_class:
                 Typ sessionů, které se mají ukončit; Pokud je None, ukončí se všechny. (Default: None)
         """
-        if session_class is None:
-            for session_class in self.sessions:
+        self.__lock.acquire()
+        try:
+            if session_class is None:
+                for session_class in self.sessions:
+                    for session in self.sessions[session_class]:
+                        session.kill(nice)
+                self.sessions = {}
+            else:
                 for session in self.sessions[session_class]:
                     session.kill(nice)
-            self.sessions = {}
-        else:
-            for session in self.sessions[session_class]:
-                session.kill(nice)
-            del self.sessions[session_class]
+                del self.sessions[session_class]
+        finally:
+            self.__lock.release()
     def kill_dead(self, session_class: Type[BakalariSession] = None):
         """Ukončí všechny sessiony, které jsou již odhlášeni z Bakalářů.
 
@@ -320,17 +330,21 @@ class SessionManager:
             session_class:
                 Typ sessionů, které se mají ukončit; Pokud je None, ukončí se všechny. (Default: None)
         """
-        if session_class is None:
-            for session_class in self.sessions:
+        self.__lock.acquire()
+        try:
+            if session_class is None:
+                for session_class in self.sessions:
+                    for session in self.sessions[session_class]:
+                        if not session.IsLogged():
+                            session.kill(False)
+                            self.unregister_session(session)
+            else:
                 for session in self.sessions[session_class]:
                     if not session.IsLogged():
                         session.kill(False)
                         self.unregister_session(session)
-        else:
-            for session in self.sessions[session_class]:
-                if not session.IsLogged():
-                    session.kill(False)
-                    self.unregister_session(session)
+        finally:
+            self.__lock.release()
 
 class BakalariAPI:
     """Hlavní classa BakalářiAPI. Pro normální použití stačí pouze tato classa.
@@ -406,49 +420,61 @@ from .bakalariobjects import *
 
 
 class Looting:
+    """Třída obsatarávající sesbírané objekty pro pozdějíší použití.
+
+    Atributy:
+        data:
+            Sesbíraná data ve slovníku [NázevTřídyObjektu, Objekt]
+        IDs:
+            Sesbíraná data ve slovníku dle ID jednotlivých objektů
+    """
     class JSONSerializer(json.JSONEncoder):
-        def default(self, o):
-            if isinstance(o, datetime):
+        def default(self, obj):
+            if isinstance(obj, datetime):
                 return {
                     "_type":   "datetime",
-                    "value":    str(o)
+                    "value":    str(obj)
                 }
-            if isinstance(o, BakalariObject):
-                output = dict(o.__dict__)
-                output["_type"] = type(o).__name__
+            if isinstance(obj, BakalariObject):
+                output = dict(obj.__dict__)
+                output["_type"] = type(obj).__name__
                 if "Instance" in output:
                     del output["Instance"]
                 return output
             #raise TypeError()
 
     def __init__(self):
-        self.Data: dict[str, BakalariObject] = {}
+        self.__lock = Lock()
+        self.data: dict[str, BakalariObject] = {}
         self.IDs: dict[str, BakalariObject] = {}
 
-    def add_loot(self, object: BakalariObject, skipCheck: bool = False) -> bool:
-        """Adds object to loot if it's ID is not already there; Returns True when object is added, False otherwise"""
-
-        if not skipCheck and object.ID in self.IDs:
-            return False
-        self.Data.setdefault(type(object).__name__, []).append(object)
-        self.IDs[object.ID] = object
+    def add_loot(self, obj: BakalariObject, skip_check: bool = False) -> bool:
+        """Přidá objekt do Lootu jestliže jeho ID v něm ještě není obsaženo; Vrátí True, pokud byl objekt přidán, jinak False"""
+        self.__lock.acquire()
+        try:
+            if not skip_check and obj.ID in self.IDs:
+                return False
+            self.data.setdefault(type(obj).__name__, []).append(obj)
+            self.IDs[obj.ID] = obj
+        finally:
+            self.__lock.release()
         return True
-    def add_loot_array(self, lootArray: list[BakalariObject]):
-        for loot in lootArray:
+    def add_loot_array(self, loot_array: list[BakalariObject]):
+        for loot in loot_array:
             self.add_loot(loot)
 
-    def export_JSON(self, byIDs: bool = False, ensure_ascii: bool = False):
-        return self.JSONSerializer(ensure_ascii = ensure_ascii).encode(self.IDs if byIDs else self.Data)
+    def export_JSON(self, by_ID: bool = False, ensure_ascii: bool = False):
+        return self.JSONSerializer(ensure_ascii = ensure_ascii).encode(self.IDs if by_ID else self.data)
 
-    def import_JSON(self, jsonString: str, skipCheck: bool = False):
-        parsed = json.loads(jsonString)
+    def import_JSON(self, json_string: str, skip_check: bool = False):
+        parsed = json.loads(json_string)
         module = __import__(__name__)
 
-        def Recursion(data) -> object:
+        def recursion(data) -> object:
             for index, value in (enumerate(data) if isinstance(data, list) else data.items()):
                 #print(f"Enumerating index '{index}', value: {value}")
                 if isinstance(value, list) or isinstance(value, dict):
-                    data[index] = Recursion(value)
+                    data[index] = recursion(value)
             if isinstance(data, dict) and "_type" in data:
                 if data["_type"] == "datetime":
                     data = utils.string2datetime(data["value"])
@@ -467,10 +493,10 @@ class Looting:
                     # print(f"In signature: {len(signature.parameters)}; In supply_list: {len(supply_list)}")
                     data = class_constructor(*supply_list)
                     #print("Adding new object to Loot (" + class_constructor.__name__ + ")")
-                    self.add_loot(data, skipCheck)
+                    self.add_loot(data, skip_check)
             return data
         
-        parsed = Recursion(parsed)
+        parsed = recursion(parsed)
 
     #TODO: Merge loots
 

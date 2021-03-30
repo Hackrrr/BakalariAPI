@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone # Here it comes... Timezone h
 # HA! Dělám si srandu. Padej to opravit! S láskou - Tvoje minulé já :)
 import webbrowser
 import time
+import multiprocessing
 
 parser = argparse.ArgumentParser(
     description="Rádoby 'API' pro Bakaláře",
@@ -42,12 +43,18 @@ parser.add_argument(
     default=-1,
     help="Test, který se má spustit (funguje pouze v kombinaci s '--shell')"
 )
+parser.add_argument(
+    "-n", "--no-auto-run",
+    help="Pokud je tato flaga přítomna, nespustí se žádné automatické akce kromě přihlášení",
+    action="store_true"
+)
 args = parser.parse_args()
 
 url = args.url
 user = args.jmeno
 password = args.heslo
 testToRun = args.test
+noAutoRun = args.no_auto_run
 
 seleniumSettings: SeleniumHandler = None
 if args.browser != "":
@@ -92,8 +99,10 @@ def Login():
     print("Nastavuji...")
     API.init()
     print("Nastaveno")
+    ServerInfo()
+    input("Pro pokračování stiskni klávasu...")
+def ServerInfo():
     print(
-        "Základní informace:\n"
         f"  Typ uživatele: {API.user_info.type}\n"
         f"  Uživatelký hash: {API.user_info.hash}\n"
         f"  Verze Bakalářů: {API.server_info.version}\n"
@@ -102,7 +111,6 @@ def Login():
     )
     if API.server_info.version != LAST_SUPPORTED_VERSION:
         print("*** Jiná verze Bakalářů! Všechny funkce nemusejí fungovat správně! ***")
-    input("Pro pokračování stiskni klávasu...")
 def Komens():
     print("Získávám IDčka zpráv...")
     zpravyIDs = API.get_komens_IDs()
@@ -155,16 +163,16 @@ def Schuzky():
         input("Pro pokračování stiskni klávasu...")
         cls()
 def Studenti():
-    if len(API.looting.Data["Student"]) and AnoNeDialog("Podařilo získat seznam studentů. Chcete jej zobrazit? "):
+    if len(API.looting.data["Student"]) and AnoNeDialog("Podařilo získat seznam studentů. Chcete jej zobrazit? "):
         count = InputCislo("Kolik výsledků najednou? (Výchozí 25) ", 25)
         offset = 0
-        length = len(API.looting.Data["Student"])
+        length = len(API.looting.data["Student"])
         cls()
         while offset < length:
             for _ in range(count):
                 if (offset >= length):
                     break
-                print(API.looting.Data["Student"][offset].format())
+                print(API.looting.data["Student"][offset].format())
                 offset += 1
             input(f"Pro pokračování stiskni klávasu... (Již zobrazeno {offset} výsledků z {length})")
             cls()
@@ -274,6 +282,9 @@ def Test5():
 
 Login()
 
+if (not noAutoRun):
+    pass
+
 cls()
 print("Shell aktivní")
 shell = Shell.Shell(
@@ -321,6 +332,11 @@ shell.AddCommand(Shell.Command(
     Ukoly,
     shortHelp="Zobrazí úkoly",
     aliases=["úkoly"]
+))
+shell.AddCommand(Shell.Command(
+    "server",
+    ServerInfo,
+    shortHelp="Zobrazí informace o serveru",
 ))
 
 if testToRun != -1:
