@@ -1,8 +1,7 @@
 import argparse
 import os
-import requests
-from bakalari import BakalariAPI, LAST_SUPPORTED_VERSION, Browser, SeleniumHandler
-import Shell
+import bakalari
+import shell
 from datetime import datetime, timedelta, timezone # Here it comes... Timezone hadndling first feel PepeLaugh
 # Hej! Moje budoucí já... Já vím, že se sem jednou podíváš... Takže až ta chvíle nastane, tak si vzpomeň, že za 100 let budou tenhle samej problém
 # s časovými pásmy řešit furt :) Takže nevadí, že si to pořád ještě po 10h debugu nespravil...
@@ -56,9 +55,9 @@ password = args.heslo
 testToRun = args.test
 noAutoRun = args.no_auto_run
 
-seleniumSettings: SeleniumHandler = None
+seleniumSettings: bakalari.SeleniumHandler = None
 if args.browser != "":
-    seleniumSettings = SeleniumHandler(Browser[args.browser.upper()], args.executablePath)
+    seleniumSettings = bakalari.SeleniumHandler(bakalari.Browser[args.browser.upper()], args.executablePath)
 
 def cls():
     os.system('cls' if os.name=='nt' else 'clear')
@@ -82,7 +81,7 @@ def InputCislo(text: str = "", default: int = None):
             return int(inpt)
         print("Špatná hodnota")
 
-API: BakalariAPI = BakalariAPI(url, user, password, seleniumSettings)
+API: bakalari.BakalariAPI = bakalari.BakalariAPI(url, user, password, seleniumSettings)
 
 def Login():
     global API
@@ -109,99 +108,118 @@ def ServerInfo():
         f"  Datum verze Bakalářů: {API.server_info.version_date.strftime('%d. %m. %Y')}\n"
         f"  Evidenční číslo verze Bakalářů: {API.server_info.evid_number}\n"
     )
-    if API.server_info.version != LAST_SUPPORTED_VERSION:
+    if API.server_info.version != bakalari.LAST_SUPPORTED_VERSION:
         print("*** Jiná verze Bakalářů! Všechny funkce nemusejí fungovat správně! ***")
 def Komens():
-    print("Získávám IDčka zpráv...")
-    zpravyIDs = API.get_komens_IDs()
-    zpravy = []
-    print("IDčka zpráv získany")
-    for ID in zpravyIDs:
-        print(f"Získávám Komens zprávu {ID}")
-        zpravy.append(API.get_komens(ID))
-    print("Zprávy získány, zobrazuji...")
+    print("Získávám zprávy...")
+    zpravy = API.get_fresh_komens()
+    length = len(zpravy)
+    print(f"Zprávy získány ({length}), zobrazuji...")
     cls()
+    count = 1
     for zprava in zpravy:
-        print("*** Zpráva ***")
-        print(zprava.format())
-        print("\n\n\n")
-        if zprava.need_confirm and not zprava.confirmed and AnoNeDialog("Zpráva vyžaduje potvrzení. Chcete potvrdit přečtení? "):
-            print("Potvrzuji zprávu...")
-            zprava.confirm(API)
-            print("Zpráva potvrzena")
-        input("Pro pokračování stiskni klávasu...")
-        cls()
+        try:
+            print(f"*** Zpráva {count} z {length} ***")
+            print(zprava.format())
+            print("\n\n\n")
+            if zprava.need_confirm and not zprava.confirmed and AnoNeDialog("Zpráva vyžaduje potvrzení. Chcete potvrdit přečtení? "):
+                print("Potvrzuji zprávu...")
+                zprava.confirm(API)
+                print("Zpráva potvrzena")
+            count += 1
+            input("Pro pokračování stiskni klávasu...")
+            cls()
+        except KeyboardInterrupt:
+            print("\n")
+            break
 def Znamky():
     print("Získávám známky...")
-    znamky = API.get_grades()
-    print("Známky získány, zobrazuji...")
+    znamky = API.get_fresh_grades()
+    length = len(znamky)
+    print(f"Známky získány ({length}), zobrazuji...")
     cls()
+    count = 1
     for znamka in znamky:
-        print("*** Známka ***")
-        print(znamka.format())
-        print("\n")
-        input("Pro pokračování stiskni klávasu...")
-        cls()
+        try:
+            print(f"*** Známka {count} z {length} ***")
+            print(znamka.format())
+            print("\n")
+            count += 1
+            input("Pro pokračování stiskni klávasu...")
+            cls()
+        except KeyboardInterrupt:
+            print("\n")
+            break
 def Schuzky():
-    print("Získávám IDčka online schůzek")
-    schuzkyIDs = API.get_future_meetings_IDs()
-    print("IDčka online schůzek získany")
-    schuzky = []
-    for ID in schuzkyIDs:
-        print(f"Získávám online schůzku {ID}")
-        schuzky.append(API.get_meeting(ID))
-    print("Online schůzky získány, zobrazuji...")
+    print("Získávám online schůzky...")
+    schuzky = API.get_fresh_meetings_future()
+    length = len(schuzky)
+    print(f"Online schůzky získány ({length}), zobrazuji...")
     cls()
+    count = 1
     for schuzka in schuzky:
-        print("*** Online Schůzka ***")
-        print(schuzka.format())
-        print("\n\n")
-        diff = schuzka.start_time - datetime.now(timezone.utc).astimezone()
-        if diff <= timedelta(minutes=30) and AnoNeDialog("Chcete otevřít online schůzku? Shůzka začíná do 30ti minut... "):
-            print("Otevírám...")
-            webbrowser.open_new_tab(schuzka.joinURL)
-        input("Pro pokračování stiskni klávasu...")
-        cls()
+        try:
+            print(f"*** Online Schůzka {count} z {length} ***")
+            print(schuzka.format())
+            print("\n\n")
+            diff = schuzka.start_time - datetime.now(timezone.utc).astimezone()
+            if diff <= timedelta(minutes=30) and AnoNeDialog("Chcete otevřít online schůzku? Shůzka začíná do 30ti minut... "):
+                print("Otevírám...")
+                webbrowser.open_new_tab(schuzka.joinURL)
+            count += 1
+            input("Pro pokračování stiskni klávasu...")
+            cls()
+        except KeyboardInterrupt:
+            print("\n")
+            break
 def Studenti():
-    if len(API.looting.data["Student"]) and AnoNeDialog("Podařilo získat seznam studentů. Chcete jej zobrazit? "):
-        count = InputCislo("Kolik výsledků najednou? (Výchozí 25) ", 25)
-        offset = 0
-        length = len(API.looting.data["Student"])
-        cls()
-        while offset < length:
+    print("Získávám studenty...")
+    studenti = API.get_fresh_students()
+    length = len(studenti)
+    print(f"Studenti získáni, počet studentů je {length}")
+    count = InputCislo("Kolik zobrazit výsledků najednou? (Výchozí 25) ", 25)
+    offset = 0
+    cls()
+    while offset < length:
+        try:
             for _ in range(count):
                 if (offset >= length):
                     break
-                print(API.looting.data["Student"][offset].format())
+                print(studenti[offset].format())
                 offset += 1
             input(f"Pro pokračování stiskni klávasu... (Již zobrazeno {offset} výsledků z {length})")
             cls()
+        except KeyboardInterrupt:
+            print("\n")
+            break
 def Konec():
     API.kill()
 def Ukoly():
-    # print("Vytvářím Selenium session...")
-    # driver = API.Selenium_Create()
-    # print(f"Selenium session vytvořen, přihlašuji jako {user}... (Session ID: {driver.session_id})")
-    # if not API.Selenium_Login(driver):
-    #     print("Zdá se, že přihlášení přes Selenium session se nezdařilo... Jsou správně přihlašovací údaje?")
-    # print("Úspěšně přihlášen přes Selenium session")
     print("Načítání úkolů...")
-    homeworks = API.get_homeworks(False)
-    print("Úkoly načteny")
-    zobrazHotove = AnoNeDialog("Chte zobrazit již hotové úkoly? ")
+    ukoly = API.get_fresh_homeworks_slow(False, False)
+    length = len(ukoly)
+    print(f"Úkoly načteny ({length})")
+    zobraz_hotove = AnoNeDialog("Chte zobrazit již hotové úkoly? ")
     cls()
-    for homework in homeworks:
-        if not zobrazHotove and homework.done:
-            continue
-        print("*** Domácí úkol ***")
-        print(homework.format())
-        print("\n\n")
-        if not homework.done and AnoNeDialog("Úkol není označen jako hotov... Chcete ho označit jako hotový? "):
-            homework.mark_as_done(API)
-            print("Úkol byl označen jako hotový")
-        input("Pro pokračování stiskni klávasu...")
-        cls()
+    count = 1
+    for ukol in ukoly:
+        try:
+            if not zobraz_hotove and ukol.done:
+                continue
+            print(f"*** Domácí úkol {count} z {length} ***")
+            print(ukol.format())
+            print("\n\n")
+            if not ukol.done and AnoNeDialog("Úkol není označen jako hotov... Chcete ho označit jako hotový? "):
+                ukol.mark_as_done(API)
+                print("Úkol byl označen jako hotový")
+            count += 1
+            input("Pro pokračování stiskni klávasu...")
+            cls()
+        except KeyboardInterrupt:
+            print("\n")
+            break
 
+#TODO: Obnovit některé testy...
 def RunTest(id):
     m = __import__(__name__)
     t = f"Test{id}"
@@ -212,6 +230,8 @@ def RunTest(id):
     else:
         print(f"Test {id} nenalezen")
 def Test0():
+    print("Tento test již není podporován... Sadge")
+    return
     print("Spouštím testování...")
     while True:
         last = API.Session.get(API.Server.GetEndpoint("session_info")).json()["data"]["remainingTime"]
@@ -221,11 +241,14 @@ def Test0():
             API.Session.get(API.Server.GetEndpoint("session_extend"))
             current = float(API.Session.get(API.Server.GetEndpoint("session_info")).json()["data"]["remainingTime"])
             if last < current:
-                break
+                print("\n")
+            break
             last = current
             time.sleep(1)
         print("Sezení bylo prodlouženo, když zbývalo " + str(last) + " (+ max 1s) do konce a bylo prodlouženo na " + str(current))
 def Test1():
+    print("Tento test již není podporován... Sadge")
+    return
     # schuzkyIDs = API.GetMeetingsIDs()
     # print("IDčka online schůzek získany")
     # for ID in schuzkyIDs:
@@ -251,6 +274,8 @@ def Test1():
     # else:
     #     print(f"Jméno náhodného studenta se liší ({randomStudentOriginalName}; {randomStudentCurrentName})")
 def Test2():
+    print("Tento test již není podporován... Sadge")
+    return
     print("Získávám IDčka online schůzek")
     IDs = API.GetAllMeetingsIDs()
     print("IDčka online schůzek získany")
@@ -261,11 +286,17 @@ def Test2():
         else:
             print(f"Online schůzka {ID} byla načtena")
 def Test3():
+    print("Tento test již není podporován... Sadge")
+    return
     return API.GetHomeworksIDs()
 def Test4():
+    print("Tento test již není podporován... Sadge")
+    return
     print("Test byl přestal být podporován a byl zrušen...")
     #return API.MarkHomeworkAsDone(input("ID Úkolu: "), input("ID Studenta: "), True)
 def Test5():
+    print("Tento test již není podporován... Sadge")
+    return
     homeworks = API.GetHomeworks()
     print("Úkoly načteny...")
     zobrazHotove = AnoNeDialog("Chte zobrazit již hotové úkoly? ")
@@ -282,64 +313,66 @@ def Test5():
 
 Login()
 
-if (not noAutoRun):
+if not noAutoRun:
     pass
 
 cls()
 print("Shell aktivní")
-shell = Shell.Shell(
-    "BakalariAPI Shell>",
-    allowPythonExec=True,
-    pythonExecPrefix=" "
+shell_instance = shell.Shell(
+    prompt="BakalariAPI Shell>",
+    allow_python_exec=True,
+    python_exec_prefix=" ",
+    python_exec_globals=globals(),
+    python_exec_locals=locals()
 )
-shell.AddCommand(Shell.Command(
+shell_instance.add_command(shell.Command(
     "clear",
     cls,
-    shortHelp="Vyčistí konzoli/terminál",
+    short_help="Vyčistí konzoli/terminál",
     aliases=["cls"]
 ))
-shell.AddCommand(Shell.Command(
+shell_instance.add_command(shell.Command(
     "komens",
     Komens,
-    shortHelp="Extrahuje a zobrazí komens zprávy"
+    short_help="Extrahuje a zobrazí komens zprávy"
 ))
-shell.AddCommand(Shell.Command(
+shell_instance.add_command(shell.Command(
     "znamky",
     Znamky,
-    shortHelp="Extrahuje a zobrazí známky"
+    short_help="Extrahuje a zobrazí známky"
 ))
-shell.AddCommand(Shell.Command(
+shell_instance.add_command(shell.Command(
     "schuzky",
     Schuzky,
-    shortHelp="Extrahuje a zobrazí (nadcházející) schůzky"
+    short_help="Extrahuje a zobrazí (nadcházející) schůzky"
 ))
-shell.AddCommand(Shell.Command(
+shell_instance.add_command(shell.Command(
     "studenti",
     Studenti,
-    shortHelp="Zobrazí studenty"
+    short_help="Zobrazí studenty"
 ))
-parser = Shell.ShellArgumentParser()
+parser = shell.ShellArgumentParser()
 parser.add_argument("id")
-shell.AddCommand(Shell.Command(
+shell_instance.add_command(shell.Command(
     "test",
     RunTest,
     parser,
-    "Spustí daný test",
-    spreadArguments=True
+    "Spustí daný test (současně jsou všechny test zastaralé a nespustí se)",
+    spread_arguments=True
 ))
-shell.AddCommand(Shell.Command(
+shell_instance.add_command(shell.Command(
     "ukoly",
     Ukoly,
-    shortHelp="Zobrazí úkoly",
+    short_help="Zobrazí úkoly",
     aliases=["úkoly"]
 ))
-shell.AddCommand(Shell.Command(
+shell_instance.add_command(shell.Command(
     "server",
     ServerInfo,
-    shortHelp="Zobrazí informace o serveru",
+    short_help="Zobrazí informace o serveru",
 ))
 
 if testToRun != -1:
     RunTest(testToRun)
-shell.StartLoop()
+shell_instance.start_loop()
 Konec()

@@ -1,16 +1,12 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from bs4 import BeautifulSoup
 
-from ..bakalari import BakalariAPI, Endpoint, RequestsSession, bakalariextension, bakalarilootable_extension
-from ..bakalariobjects import Komens, KomensFile
+from ..bakalari import BakalariAPI, Endpoint, RequestsSession, GetterOutput, ResultSet
+from ..bakalariobjects import Komens, KomensFile, UnresolvedID
 
-#TODO: Komens2Meetings
-
-@bakalariextension
-def get_komens_IDs(bakalariAPI: BakalariAPI, from_date: datetime = None, to_date: datetime = None) -> list[str]:
+def getter_komens_ids(bakalariAPI: BakalariAPI, from_date: datetime = None, to_date: datetime = None) -> GetterOutput:
     """Získá IDčka daných Komens zpráv."""
-    output = []
     target = bakalariAPI.get_endpoint(Endpoint.KOMENS)
 
     if from_date is not None or to_date is not None:
@@ -23,32 +19,32 @@ def get_komens_IDs(bakalariAPI: BakalariAPI, from_date: datetime = None, to_date
     session = bakalariAPI.session_manager.get_session_or_create(RequestsSession)
     response = session.get(target)
     session.busy = False
+    return GetterOutput(GetterOutput.Types.SOUP, Endpoint.KOMENS, BeautifulSoup(response.content, "html.parser"))
 
-    soup = BeautifulSoup(response.content, "html.parser")
-    komens_list = soup.find(id="message_list_content").find("ul").find_all("li", recursive=False)
-    for komens in komens_list:
-        output.append(komens.find("table")["data-idmsg"])
-    return output
-
-@bakalariextension
-def get_all_komens_IDs(bakalariAPI: BakalariAPI):
-    """Získá IDčka všech přijatých Komens zpráv."""
-    return bakalariAPI.get_komens_IDs(datetime(1953, 1, 1), datetime.today() + timedelta(1))
-
-
-@bakalarilootable_extension
-def get_komens(bakalariAPI: BakalariAPI, ID: str, context: str = "prijate") -> Komens:
-    """Získá Komens zprávu s daným ID."""
+def getter_info(bakalariAPI: BakalariAPI, ID: str, context: str = "prijate") -> GetterOutput:
     session = bakalariAPI.session_manager.get_session_or_create(RequestsSession)
     response = session.post(bakalariAPI.get_endpoint(Endpoint.KOMENS_GET), json={
         "idmsg": ID,
         "context": context
     }).json()
     session.busy = False
+    return GetterOutput(GetterOutput.Types.JSON, Endpoint.KOMENS_GET, response)
 
-    soubory = []
-    if len(response["Files"]) != 0:
-        for soubor in response["Files"]:
+
+@BakalariAPI.register_parser(Endpoint.KOMENS)
+def parser_main(getter_output: GetterOutput) -> ResultSet:
+    output = ResultSet()
+    komens_list = getter_output.data.find(id="message_list_content").find("ul").find_all("li", recursive=False)
+    for komens in komens_list:
+        output.add_loot(UnresolvedID(komens.find("table")["data-idmsg"], Komens))
+    return output
+
+@BakalariAPI.register_parser(Endpoint.KOMENS_GET)
+def parser_info(getter_output: GetterOutput) -> ResultSet:
+    jsn = getter_output.data
+    output = ResultSet()
+    if len(jsn["Files"]) != 0:
+        for soubor in jsn["Files"]:
             komens_file = KomensFile(
                 soubor["id"],
                 soubor["name"],
@@ -57,19 +53,19 @@ def get_komens(bakalariAPI: BakalariAPI, ID: str, context: str = "prijate") -> K
                 soubor["idmsg"],
                 soubor["path"],
             )
-            soubory.append(komens_file)
-            #if soubor["idmsg"] != ID:
-            #    warnings.warn(f"ID zprávy se neschoduje s ID zprávy referencované v souboru; ID zprávy: {ID}, ID v souboru: {soubor['idmsg']}", UnexpectedBehaviour)
+            output.add_loot(komens_file)
+    return output.add_loot(Komens(
+        jsn["Id"],
+        jsn["Jmeno"],
+        jsn["MessageText"],
+        datetime.strptime(jsn["Cas"], "%d.%m.%Y %H:%M"),
+        jsn["MohuPotvrdit"],
+        jsn["Potvrzeno"],
+        jsn["Kind"],
+        output.retrieve_type(KomensFile)
+    ))
 
-    komens = Komens(
-        ID,
-        response["Jmeno"],
-        response["MessageText"],
-        datetime.strptime(response["Cas"], "%d.%m.%Y %H:%M"),
-        response["MohuPotvrdit"],
-        response["Potvrzeno"],
-        response["Kind"],
-        soubory
-    )
-    bakalariAPI.looting.add_loot_array(soubory)
-    return komens
+
+@BakalariAPI.register_resolver(Komens)
+def resolver(bakalariAPI: BakalariAPI, unresolved: UnresolvedID) -> Komens:
+    return parser_info(getter_info(bakalariAPI, unresolved.ID)).retrieve_type(Komens)[0]

@@ -3,40 +3,47 @@ from datetime import datetime
 
 from bs4 import BeautifulSoup
 
-from ..bakalari import BakalariAPI, Endpoint, RequestsSession, bakalariextension, bakalarilootable_extension
+from ..bakalari import BakalariAPI, Endpoint, RequestsSession, ResultSet, GetterOutput
 from ..utils import line_iterator
-from ..bakalariobjects import Meeting, Student
+from ..bakalariobjects import Meeting, Student, UnresolvedID
 
 
-@bakalarilootable_extension
-def get_meeting(bakalariAPI: BakalariAPI, ID: str) -> Meeting:
+def getter_meeting(bakalariAPI: BakalariAPI, ID: str) -> GetterOutput:
     """Získá schůzku s daným ID."""
     session = bakalariAPI.session_manager.get_session_or_create(RequestsSession, True)
     response = session.get(bakalariAPI.get_endpoint(Endpoint.MEETINGS_INFO) + ID).json()
     session.busy = False
-    meeting = Meeting(
-        response["data"]["Id"],
-        response["data"]["OwnerId"],
-        response["data"]["Title"],
-        response["data"]["Details"],
-        datetime.strptime(response["data"]["MeetingStart"], "%Y-%m-%dT%H:%M:%S%z"),
-        datetime.strptime(response["data"]["MeetingEnd"], "%Y-%m-%dT%H:%M:%S%z"),
-        response["data"]["JoinMeetingUrl"],
-        [(s["PersonId"], s["PersonName"]) for s in response["data"]["Participants"]],
-        [(s["PersonId"], datetime.strptime(s["Readed"][:-(len(s["Readed"]) - s["Readed"].rfind("."))], "%Y-%m-%dT%H:%M:%S")) for s in response["data"]["ParticipantsListOfRead"]]
-    )
-    return meeting
+    return GetterOutput(GetterOutput.Types.JSON, Endpoint.MEETINGS_INFO, response)
 
-@bakalariextension
-def get_future_meetings_IDs(bakalariAPI: BakalariAPI) -> list[str]:
+def getter_future_meetings_ids(bakalariAPI: BakalariAPI) -> GetterOutput:
     """Získá IDčka budoucích schůzek."""
     session = bakalariAPI.session_manager.get_session_or_create(RequestsSession, True)
     response = session.get(bakalariAPI.get_endpoint(Endpoint.MEETINGS_OVERVIEW))
     session.busy = False
+    return GetterOutput(GetterOutput.Types.SOUP, Endpoint.MEETINGS_OVERVIEW, BeautifulSoup(response.content, "html.parser"))
 
-    soup = BeautifulSoup(response.content, "html.parser")
-    output = []
-    scritps = soup.head("script")
+def getter_meetings_ids(bakalariAPI: BakalariAPI, from_date: datetime, to_date: datetime) -> GetterOutput:
+    """Získá IDčka daných schůzek."""
+    session = bakalariAPI.session_manager.get_session_or_create(RequestsSession, True)
+    response = session.post(bakalariAPI.get_endpoint(Endpoint.MEETINGS_OVERVIEW), {
+        "TimeWindow": "FromTo",
+        "FilterByAuthor": "AllInvitations",
+        "MeetingFrom": from_date.strftime("%Y-%m-%dT%H:%M:%S") + "+00:00",
+        "MeetingTo": to_date.strftime("%Y-%m-%dT%H:%M:%S") + "+00:00"
+    }).json()
+    session.busy = False
+    return GetterOutput(GetterOutput.Types.JSON, Endpoint.MEETINGS_OVERVIEW, response)
+
+
+
+
+
+@BakalariAPI.register_parser(Endpoint.MEETINGS_OVERVIEW)
+def parser_meetings_overview_html(getter_output: GetterOutput) -> ResultSet:
+    if getter_output.type != GetterOutput.Types.SOUP:
+        return None
+    output = ResultSet()
+    scritps = getter_output.data.head("script")
     for script in scritps:
         formated = script.prettify()
         if "var model = " in formated:
@@ -51,12 +58,12 @@ def get_future_meetings_IDs(bakalariAPI: BakalariAPI) -> list[str]:
             loot["Meetings"] = True
             meetingsJSON = json.loads(line.strip()[len("var meetingsData = "):-1])
             for meeting in meetingsJSON:
-                output.append(str(meeting["Id"])) # Actually je to číslo, ale všechny ostaní IDčka jsou string, takže se budeme tvářit že je string i tohle...
+                output.add_loot(UnresolvedID(str(meeting["Id"]), Meeting)) # Actually je to int, ale všechny ostaní IDčka jsou string, takže se budeme tvářit že je string i tohle...
         elif line.startswith("model.Students = ko.mapping.fromJS("):
             loot["Students"] = True
             studentsJSON = json.loads(line.strip()[len("model.Students = ko.mapping.fromJS("):-2])
             for student in studentsJSON:
-                bakalariAPI.looting.add_loot(Student(
+                output.add_loot(Student(
                     student["Id"],
                     student["Name"],
                     student["Surname"],
@@ -65,24 +72,30 @@ def get_future_meetings_IDs(bakalariAPI: BakalariAPI) -> list[str]:
         if loot["Meetings"] and loot["Students"]:
             break
     return output
+@BakalariAPI.register_parser(Endpoint.MEETINGS_OVERVIEW)
+def parser_meetings_overview_json(getter_output: GetterOutput) -> ResultSet:
+    if getter_output.type != GetterOutput.Types.JSON:
+        return None
+    output = ResultSet()
+    for meeting in getter_output.data["data"]["Meetings"]:
+        output.add_loot(UnresolvedID(str(meeting["Id"]), Meeting))
+    return ResultSet
 
-@bakalariextension
-def get_meetings_IDs(bakalariAPI: BakalariAPI, from_date: datetime, to_date: datetime) -> list[str]:
-    """Získá IDčka daných nebo všech schůzek."""
-    session = bakalariAPI.session_manager.get_session_or_create(RequestsSession, True)
-    response = session.post(bakalariAPI.get_endpoint(Endpoint.MEETINGS_OVERVIEW), {
-        "TimeWindow": "FromTo",
-        "FilterByAuthor": "AllInvitations",
-        "MeetingFrom": from_date.strftime("%Y-%m-%dT%H:%M:%S") + "+00:00",
-        "MeetingTo": to_date.strftime("%Y-%m-%dT%H:%M:%S") + "+00:00"
-    }).json()
-    session.busy = False
-    output = []
-    for meeting in response["data"]["Meetings"]:
-        output.append(str(meeting["Id"]))
-    return output
+@BakalariAPI.register_parser(Endpoint.MEETINGS_INFO)
+def parser_meetings_info(getter_output: GetterOutput) -> ResultSet:
+    obj = getter_output.data
+    return ResultSet(Meeting(
+        obj["data"]["Id"],
+        obj["data"]["OwnerId"],
+        obj["data"]["Title"],
+        obj["data"]["Details"],
+        datetime.strptime(obj["data"]["MeetingStart"], "%Y-%m-%dT%H:%M:%S%z"),
+        datetime.strptime(obj["data"]["MeetingEnd"], "%Y-%m-%dT%H:%M:%S%z"),
+        obj["data"]["JoinMeetingUrl"],
+        [(s["PersonId"], s["PersonName"]) for s in obj["data"]["Participants"]],
+        [(s["PersonId"], datetime.strptime(s["Readed"][:-(len(s["Readed"]) - s["Readed"].rfind("."))], "%Y-%m-%dT%H:%M:%S")) for s in obj["data"]["ParticipantsListOfRead"]]
+    ))
 
-@bakalariextension
-def get_all_meetings_IDs(bakalariAPI: BakalariAPI) -> list[str]:
-    """Získá IDčka všech schůzek"""
-    return bakalariAPI.get_meetings_IDs(datetime(1, 1, 1), datetime(9999, 12, 31, 23, 59, 59))
+@BakalariAPI.register_resolver(Meeting)
+def resolver(bakalariAPI: BakalariAPI, unresolved: UnresolvedID) -> Meeting:
+    return parser_meetings_info(getter_meeting(bakalariAPI, unresolved.ID)).retrieve_type(Meeting)[0]

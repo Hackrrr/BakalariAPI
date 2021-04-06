@@ -1,9 +1,11 @@
 """
-Jednoduché (i složitější) utility sloužící ke správnému fungování BakalariAPI.
+Jednoduché (i složitější) utility sloužící ke správnému fungování BakalářiAPI.
 """
 
-from bs4 import BeautifulSoup
 from datetime import datetime
+
+from bs4 import BeautifulSoup
+
 
 def first2upper(string: str) -> str:
     """První znak ve stringu dá do Uppercase"""
@@ -51,5 +53,5 @@ def bs_get_text(soup: BeautifulSoup) -> str:
     body = soup.find("body")
     if body != None:
         soup = body
-    
+
     return soup.get_text().strip()

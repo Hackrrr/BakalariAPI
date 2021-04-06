@@ -1,41 +1,34 @@
-#TODO: NoSeleniumException - Do something like this:
-# There:
-# if not selenium:
-#     raise NoSeleniumException
-# In importer:
-# try:
-#     import THIS_MODULE
-# except NoSeleniumException:
-#     pass
-
 from datetime import datetime
 
 from bs4 import BeautifulSoup
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as SeleniumConditions
-from selenium.webdriver.support.wait import WebDriverWait
 
-from ..bakalari import BakalariAPI, Endpoint, RequestsSession, SeleniumSession, bakalariextension, bakalarilootable_extension
+from .. import exceptions
+from ..bakalari import _HAVE_SELENIUM, BakalariAPI, Endpoint, GetterOutput, RequestsSession, ResultSet, SeleniumSession
 from ..bakalariobjects import Homework, HomeworkFile
 
+if _HAVE_SELENIUM:
+    from selenium.common.exceptions import NoSuchElementException, TimeoutException
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support import expected_conditions as SeleniumConditions
+    from selenium.webdriver.support.wait import WebDriverWait
 
-@bakalariextension
-def get_homeworks_fast(bakalariAPI: BakalariAPI) -> list[str]:
+
+def getter_fast(bakalariAPI: BakalariAPI) -> GetterOutput:
     """Získá pouze prvních 20 nehotových aktivních úkolů, ale je mnohem rychlejší než ostatní metody na získání úkolů."""
     session = bakalariAPI.session_manager.get_session_or_create(RequestsSession, True)
     response = session.get(bakalariAPI.get_endpoint(Endpoint.HOMEWORKS))
     session.busy = False
-    return parse_homework_page(BeautifulSoup(response.content, "html.parser"))
+    return GetterOutput(GetterOutput.Types.SOUP, Endpoint.HOMEWORKS, BeautifulSoup(response.content, "html.parser"))
 
 
-
-@bakalarilootable_extension
-def get_homeworks(bakalariAPI: BakalariAPI, unfinished_only: bool = True, only_first_page: bool = False, first_loading_timeout: float = 5, second_loading_timeout: float = 10) -> list[Homework]:
+def get_slow(bakalariAPI: BakalariAPI, unfinished_only: bool = True, only_first_page: bool = False, first_loading_timeout: float = 5, second_loading_timeout: float = 10) -> ResultSet:
     """Získá dané domácí úkoly."""
+
+    #TODO: Page size param
+
     session = bakalariAPI.session_manager.get_session_or_create(SeleniumSession, True)
     session.session.get(bakalariAPI.get_endpoint(Endpoint.HOMEWORKS))
-    output = []
+    output = ResultSet()
 
     if not unfinished_only:
         session.session.find_element_by_xpath("//span[span/input[@id='cphmain_cbUnfinishedHomeworks_S']]").click()
@@ -47,14 +40,15 @@ def get_homeworks(bakalariAPI: BakalariAPI, unfinished_only: bool = True, only_f
 
     while True:
         source = session.session.page_source
-        temp_list = parse_homework_page(BeautifulSoup(source, "html.parser"))
+        temp_result = parser(GetterOutput(GetterOutput.Types.SOUP, Endpoint.HOMEWORKS, BeautifulSoup(source, "html.parser")))
 
-        if temp_list[0].ID == checkID:
+        if temp_result.retrieve_type(Homework)[0].ID == checkID:
             # Očividně tedy selhalo pozorovnání loading obrazovky a parsujeme stejnou stránku dvakrát, takže cyklus ukončujeme
-            # (jen tak mimochodem... toto taky znamená, že Bakaláři jsou zase bugnutý a stránka se neposunula i přesto, že další stránka exististuje (nebo jsme selhali my s detekování existence další stánky))
+            # Jen tak mimochodem... toto taky znamená, že Bakaláři jsou zase bugnutý a stránka se neposunula i přesto, že další stránka exististuje
+            # (nebo jsme selhali my s detekování existence další stánky, o čemž ale dost pochybuji)
             break
 
-        output += temp_list
+        output.merge(temp_result)
 
 
         if not only_first_page:
@@ -77,14 +71,16 @@ def get_homeworks(bakalariAPI: BakalariAPI, unfinished_only: bool = True, only_f
 
     session.busy = False
     return output
+if not _HAVE_SELENIUM:
+    def get_slow(bakalariAPI: BakalariAPI, unfinished_only: bool = True, only_first_page: bool = False, first_loading_timeout: float = 5, second_loading_timeout: float = 10) -> ResultSet: # pylint: disable=function-redefined
+        raise exceptions.NoSeleniumException
 
 
-
-
-def parse_homework_page(soup: BeautifulSoup) -> list[Homework]:
+@BakalariAPI.register_parser(Endpoint.HOMEWORKS)
+def parser(getter_output: GetterOutput) -> ResultSet:
     """Parsuje získanou stránku s domácími úkoly a vrací parsované úkoly."""
-    output = []
-    rows = soup.find(id="grdukoly_DXMainTable").find("tbody")("tr", recursive=False)
+    output = ResultSet()
+    rows = getter_output.data.find(id="grdukoly_DXMainTable").find("tbody")("tr", recursive=False)
     for row in rows[1:]:
         # První je hlavička tabulky (normálně bych se divil, proč tu není <thead> a <tbody> (jako u jiných tabulek), ale jsou to Bakaláři, takže to jsem schopnej pochopit)
         tds = row("td")
@@ -100,5 +96,5 @@ def parse_homework_page(soup: BeautifulSoup) -> list[Homework]:
         for a in tds[4]("a"):
             files.append(HomeworkFile(a["href"][len("getFile.aspx?f="):], a.span.text, ID))
 
-        output.append(Homework(ID, datum_odevzdani, predmet, zadani, datum_zadani, hotovo, files))
+        output.add_loot(Homework(ID, datum_odevzdani, predmet, zadani, datum_zadani, hotovo, files))
     return output

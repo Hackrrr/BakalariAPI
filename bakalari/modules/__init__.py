@@ -1,5 +1,12 @@
-""" """
-import os
-__all__ = [ x[:-3] for x in os.listdir(os.path.dirname(__file__)) if x.endswith(".py") and not x.startswith("_") ]
+"""Modul obsahující jednotlivé moduly pro BakalářiAPI.
 
-#BTW je tohle vůbec potřeba? Jak tak nad tím přemýšlím, tak ne... eShrug Protože generuji
+Umožňuje přístup k low-level záležitostem BakalářiAPI.
+Použij na vlastní riziko.
+
+Obsahuje následující submoduly:
+    grades - Práce se známkami
+    homeworks - Práce s domácími úkoly
+    komens - Práce s komens zprávami
+    meetings - Práce se schůzkami
+"""
+from . import grades, homeworks, komens, meetings

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import datetime
+from typing import Type
 
 from bs4 import BeautifulSoup
 
@@ -17,6 +18,8 @@ __all__ = [
     "UserInfo",
 
     "BakalariObject",
+    "UnresolvedID",
+
     "BakalariFile",
     "KomensFile",
     "HomeworkFile",
@@ -28,9 +31,12 @@ __all__ = [
 ]
 
 class ServerInfo():
-    """    Třída obsahující informace o samotném systému Bakaláři.
+    """Třída obsahující informace o samotném systému Bakaláři.
 
     Atributy:
+        url:
+            URL adresa webového rozhraní Bakalářů.
+            Musí být ve validním HTTP scématu, např. "https://bakalari.mojeskola.cz".
         version:
             Verze Bakalářů.
         version_date:
@@ -38,12 +44,13 @@ class ServerInfo():
         evid_number:
             Evidenční číslo verze Bakalářů.
     """
-    def __init__(self, bakalariVersion: str = "", bakalariVersionDate: datetime = None, bakalariEvidNumber: int = None):
+    def __init__(self, url: str, bakalariVersion: str = "", bakalariVersionDate: datetime = None, bakalariEvidNumber: int = None):
+        self.url: str = url
         self.version: str = bakalariVersion
         self.version_date: datetime = bakalariVersionDate
         self.evid_number: int = bakalariEvidNumber
 class UserInfo():
-    """    Třída obsahující informace o uživatelovi.
+    """Třída obsahující informace o uživatelovi.
 
     Atributy:
         type:
@@ -61,7 +68,7 @@ class UserInfo():
         self.ID: str = userID
 
 class BakalariObject(ABC):
-    """    Základní třída pro objekty parsované z Bakalářů (kromě tříd ServerInfo a UserInfo).
+    """Základní třída pro objekty parsované z Bakalářů (kromě tříd ServerInfo a UserInfo).
 
     Atributy:
         ID:
@@ -73,29 +80,44 @@ class BakalariObject(ABC):
     @abstractmethod
     def format(self) -> str:
         """Vrátí text vhodný pro zobrazení uživatelovi aplikace/BakalariAPI."""
-        pass
+class UnresolvedID(BakalariObject):
+    """Třída/objekt držící ID, které bylo získáno, ale zatím k němu byl získán objekt.
+
+    Atributy:
+        type:
+            Odhadovaný typ objektu, pro které je toto ID
+    """
+
+    def __init__(self, ID: str, type_: Type[BakalariObject] = None):
+        super().__init__(ID)
+        self.type: Type[BakalariObject] = type_
+    def format(self) -> str:
+        return f"Nevyřešené ID '{self.ID}'" + ("" if self.type is None else " typu {self.type}")
+
 
 class BakalariFile(BakalariObject):
     """Třída/objekt držící informace o souboru/příloze na Bakalařích"""
     def __init__(self, ID: str, name: str, size: int, type_: str = ""):
-        super(BakalariFile, self).__init__(ID)
+        super().__init__(ID)
         self.name: str = name
         self.size: int = size
         self.type: str = type_
 
-    @property
-    def downloadURL(self, bakalariAPI: BakalariAPI):
-        """Generuje (Sestaví) URL k souboru na serveru (SeverURL + Endpoint + ID_SOUBORU)"""
+    def get_download_url(self, bakalariAPI: BakalariAPI):
+        """Vygeneruje/Sestaví URL k souboru"""
         return bakalariAPI.get_endpoint(Endpoint.FILE) + "?f=" + self.ID
 
-    # def DownloadStream(self, instance: BakalariAPI) -> requests.Response:
-    #     """Otevře stream na pro daný soubor pomocí 'requests' modulu a vrátí requests.Response, kterým lze iterovat pomocí metody '.iter_lines()'"""
-    #     instance.Session.get(self.GenerateURL(instance.server), stream=True)
-    #TODO: DowloadStream
-
     def download(self, bakalariAPI: BakalariAPI) -> bytes:
-        """Stáhne daný soubor a vrátí ho jakožto (typ) byty (Doporučuje se ale použít metoda '.DownloadStream()', jelikož se zde soubor ukládá do paměti a ne na disk)"""
-        return bakalariAPI.session_manager.get_session_or_create(RequestsSession).get(self.downloadURL).content
+        """Stáhne daný soubor a navrátí ho.
+        Pozn.:
+            Přestože soubory budou většinou do 10 MB, nedoporučuje se tuto metodu používat pokud si nejste vědomy velikosti souboru.
+            Soubor se totiž bufferuje celý a hrozí riziko zaplnění paměti.
+            Ideální cesta je napsat vlastní metodu, která bude soubor stahovat po částech a rovnou někam ukládat.
+        """
+        session = bakalariAPI.session_manager.get_session_or_create(RequestsSession)
+        output = session.get(self.get_download_url(bakalariAPI)).content
+        session.busy = False
+        return output
 
     def format(self) -> str:
         return (
