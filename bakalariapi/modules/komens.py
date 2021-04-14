@@ -19,7 +19,7 @@ def getter_komens_ids(bakalariAPI: BakalariAPI, from_date: datetime = None, to_d
     session = bakalariAPI.session_manager.get_session_or_create(RequestsSession)
     response = session.get(target)
     session.busy = False
-    return GetterOutput(GetterOutput.Types.SOUP, Endpoint.KOMENS, BeautifulSoup(response.content, "html.parser"))
+    return GetterOutput( Endpoint.KOMENS, BeautifulSoup(response.content, "html.parser"))
 
 def getter_info(bakalariAPI: BakalariAPI, ID: str, context: str = "prijate") -> GetterOutput:
     session = bakalariAPI.session_manager.get_session_or_create(RequestsSession)
@@ -28,19 +28,19 @@ def getter_info(bakalariAPI: BakalariAPI, ID: str, context: str = "prijate") -> 
         "context": context
     }).json()
     session.busy = False
-    return GetterOutput(GetterOutput.Types.JSON, Endpoint.KOMENS_GET, response)
+    return GetterOutput(Endpoint.KOMENS_GET, response)
 
 
-@BakalariAPI.register_parser(Endpoint.KOMENS)
-def parser_main(getter_output: GetterOutput) -> ResultSet:
+@BakalariAPI.register_parser(Endpoint.KOMENS, BeautifulSoup)
+def parser_main(getter_output: GetterOutput[BeautifulSoup]) -> ResultSet:
     output = ResultSet()
     komens_list = getter_output.data.find(id="message_list_content").find("ul").find_all("li", recursive=False)
     for komens in komens_list:
         output.add_loot(UnresolvedID(komens.find("table")["data-idmsg"], Komens))
     return output
 
-@BakalariAPI.register_parser(Endpoint.KOMENS_GET)
-def parser_info(getter_output: GetterOutput) -> ResultSet:
+@BakalariAPI.register_parser(Endpoint.KOMENS_GET, dict)
+def parser_info(getter_output: GetterOutput[dict]) -> ResultSet:
     jsn = getter_output.data
     output = ResultSet()
     if len(jsn["Files"]) != 0:

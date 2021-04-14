@@ -13,10 +13,10 @@ def getter(bakalariAPI: BakalariAPI, from_date: datetime = None) -> GetterOutput
     session = bakalariAPI.session_manager.get_session(RequestsSession)
     response = session.get(bakalariAPI.get_endpoint(Endpoint.GRADES) + ("" if from_date is None else f"?dfrom={from_date.strftime('%Y%m%d')}0000&subt=obdobi"))
     session.busy = False
-    return GetterOutput(GetterOutput.Types.SOUP, Endpoint.GRADES, BeautifulSoup(response.content, "html.parser"))
+    return GetterOutput(Endpoint.GRADES, BeautifulSoup(response.content, "html.parser"))
 
-@BakalariAPI.register_parser(Endpoint.GRADES)
-def parser(getter_output: GetterOutput) -> ResultSet:
+@BakalariAPI.register_parser(Endpoint.GRADES, BeautifulSoup)
+def parser(getter_output: GetterOutput[BeautifulSoup]) -> ResultSet:
     """Parsuje stránku se známkami."""
     output = ResultSet()
     znamky_list = getter_output.data("div", attrs={"data-clasif": True})

@@ -4,9 +4,9 @@
 # Metadata
 | Název                             | Hodnota                    |
 |-----------------------------------|:--------------------------:|
-| Verze Bakalářů                    | 1.36.1214.1                |
-| Datum verze Bakalářů              | 14. 12. 2020               |
-| Datum poslední změny dokumentu    | 20. 12. 2020               |
+| Verze Bakalářů                    | 1.39.408.1                 |
+| Datum verze Bakalářů              | 8. 4. 2021                 |
+| Datum poslední změny dokumentu    | 10. 4. 2021                |
 | Potřeba Selenia?                  | Ne                         |
 
 # Přehled
@@ -57,7 +57,8 @@ Vrací se klasicky zabalený JSON:
       "CanEdit":false,
       "IsInvitationByEmailOrKomens":true,
       "JoinMeetingUrl":"https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-      "HasExternalChange":false
+      "HasExternalChange":false,
+      "MeetingProviderId": 1
    }
 }
 ```
@@ -79,6 +80,7 @@ Popis klíčů (v klíči `data`):
 - `MeetingEndTime` - Stejná hodnota jako `MeetingEnd`, nechápu, proč to tu je... eShrug
 - `RecipientsDisplayName` - "Příjemce" (resp. to co se ukazuje jako příjemce)
 - `JoinMeetingUrl` - Link/URL na připojení ke schůzce
+- `MeetingProviderId` - ID providera schůzky (= platforma schůzky); viz ednpoit `meetings_overview`
 
 
 Objekty pod klíči `Participants`, `ParticipantsListOfRead` a `ParticipantsListOfDontRead` vypadají takto:
@@ -98,9 +100,7 @@ Popis klíčů (v klíči `data`):
 - `RecipientRole` - Role účastníka/pozvaného na schůzce (asi); `2` = účastníka/pozvaný, `1` = pořadatel/organizátor schůzky
 - `Emails` - eShrug - Zatím zde nebyla spatřena jiná hodnota než `null`
 
-
 *Pozn.: Jelikož klíč `OwnerName` je vždy `null`, tak musíme získat jméno pořadatele/organizátora schůzky jiným způsobem - musíme prohledat array v klíči `Participants` a najít položku, kde její klíč `Id` je shodný s klíčem `OwnerId` v objektu schůzky nebo kde klíč `RecipientRole` je roven `1`.*
-
 
 Pokud ID schůzky neexistuje, vrátí se HTTP status kód 302 (Found) a přesměrování na `/dashboard` endpointt s prázdným GET parametrem `e`. Pokud ID schůzky existuje, ale schůzka neexistuje (nebo tak něco; takováto schůzka nalezena pouze jednou), vrátí se HTTP status kód 500 (Internal Server Error) a JSON:
 ```JSON

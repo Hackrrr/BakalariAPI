@@ -4,9 +4,9 @@
 # Metadata
 | Název                             | Hodnota                    |
 |-----------------------------------|:--------------------------:|
-| Verze Bakalářů                    | 1.36.1214.1                |
-| Datum verze Bakalářů              | 14. 12. 2020               |
-| Datum poslední změny dokumentu    | 20. 12. 2020               |
+| Verze Bakalářů                    | 1.39.408.1                 |
+| Datum verze Bakalářů              | 8. 4. 2021                 |
+| Datum poslední změny dokumentu    | 11. 4. 2021                |
 | Potřeba Selenia?                  | Ne                         |
 
 # Přehled
@@ -57,7 +57,8 @@ Vrací se klasicky zabalený JSON:
             "CanEdit":false,
             "IsInvitationByEmailOrKomens":false,
             "JoinMeetingUrl":null,
-            "HasExternalChange":false
+            "HasExternalChange":false,
+            "MeetingProviderId":0
          },
          ...
       ],
@@ -128,7 +129,8 @@ Sice je to náročnější scrapping, ale taky z toho můžeme získat o dost v�
         "CanEdit":false,
         "IsInvitationByEmailOrKomens":false,
         "JoinMeetingUrl":null,
-        "HasExternalChange":false
+        "HasExternalChange":false,
+        "MeetingProviderId":0
     },
     ...
 ]
@@ -137,7 +139,7 @@ Sice je to náročnější scrapping, ale taky z toho můžeme získat o dost v�
 
 
 ## Extrakce dat 1 - HTML => JS => JSON
-No ale proč to dělat touto metodou? Vždyť tohle je úplně k ničemu, když máme jiný a lepší způsob... No - v tomto `<script>` tagu se nachází ještě seznam všech studentů na škole... Ano... **A absolutně nemám ponětí, co tam dělá, jelikož jsem nenarazil na jedinou věc, kde se používá...** Možná by se to mělo někomu nahlásit, ale já jsem línej to dělat. Každopádně nyní hledáme řádku začínající (opět po osekání mezer a tabů) `model.Students = ko.mapping.fromJS(`. Kdyý ji najdeme a osekneme začátek a konec (tedy `");"`), tak získáme JSON studentů:
+No ale proč to dělat touto metodou? Vždyť tohle je úplně k ničemu, když máme jiný a lepší způsob... No - v tomto `<script>` tagu se nachází ještě seznam všech studentů na škole... Ano... **A absolutně nemám ponětí, co tam dělá, jelikož jsem nenarazil na jedinou věc, kde se používá...** Možná by se to mělo někomu nahlásit, ale já jsem línej to dělat. Každopádně nyní hledáme řádku začínající (opět po osekání mezer a tabů) `model.Students = ko.mapping.fromJS(`. Když ji najdeme a osekneme začátek a konec (tedy `");"`), tak získáme JSON studentů:
 ```JSON
 [
     {
@@ -152,5 +154,34 @@ No ale proč to dělat touto metodou? Vždyť tohle je úplně k ničemu, když 
 ```
 Klíč `"Name"` popřípadě obsahuje i druhé jméno. Klíč `FullName` je poskládán z ostatních hodnot.
 
+
+# MeetingsProvider
+Verzi Bakalářů `1.37.*` přibyl v JSON datech na endpointech `meetings_overview` a `meetings_info` klíč `MeetingProviderId`. Tento klíč pravděpodobně indikuje platformu/providera schůzky, avšak zatím nebyla zaznamenána jiná hodnota než `1`.
+
+| ID  | Klíč            | Popisek                                 |
+|:---:|-----------------|-----------------------------------------|
+| 0   | None            | žádný                                   |
+| 1   | Microsoft       | Microsoft Office 365 for Education      |
+| 2   | Google          | Google Meet                             |
+
+*Pozn.: Ačkoli na endpointu `meetings_overview` má klíč `MeetingProviderId` vždy hodnotu `0`, je tato tablka zde, jelikož data, z nichž tato tabulka vychází, jsou na tomto endpointu.*
+
+Ačkoli by se tato data dala považovat za dynamická, jelikož jsou v Bakalářích "dynamicky" dosazana skrze JS, pochybuji, že by se tato tabulka/tyto data nějak často měnily nebo byly odlišné v jednotlivých instancích Bakalářů. `BakalářiAPI` má v tuto chvíli tyto data "uložena" staticky, ale uvažuje se o jejich dynamickém získávání. Z toho důvodu se zde uvádí i daný `<script>` tag, ve kterém jsou v Bakalářích tyto data incializována (tento tag předchází tagu, kde jsou uložena data na schůzky i o studentech):
+```html
+<script type='text/javascript'>
+   var Dictionaries = [];
+   Dictionaries['MeetingProvider'] = [];
+   Dictionaries['MeetingProvider']['_Google']={"id":2,"key":"Google","label":"Google Meet"}; 
+   Dictionaries['MeetingProvider'].push(Dictionaries['MeetingProvider']['_Google']); 
+   Dictionaries['MeetingProvider']['_Microsoft']={"id":1,"key":"Microsoft","label":"Microsoft Office 365 for Education"}; 
+   Dictionaries['MeetingProvider'].push(Dictionaries['MeetingProvider']['_Microsoft']); 
+   Dictionaries['MeetingProvider']['_None']={"id":0,"key":"None","label":"žádný"}; 
+   Dictionaries['MeetingProvider'].push(Dictionaries['MeetingProvider']['_None']); 
+   Object.freeze(Dictionaries);
+</script>
+```
+
 # Výzkum
 Enpoint nalezen přes normální proklik přes menu. "Request 0" byl zjištěn přes odchyt výsledků filtrování a následně vyzkoušeno, které parametry je potřeba a které lze vyhodit. Co znamenají jaká data v "Response 0" bylo odvozeno. Možnost získání dat z JS byla objevena při manuální průzkumu zdroje při hledání způsobu, jak scrapnout schůzky.
+
+Data do tabulky MeetigsProvider byla získána analýzou zdrojového kódu, při výskytu nového pole v uživatelském rozhraní Bakalářů.

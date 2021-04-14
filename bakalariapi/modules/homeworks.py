@@ -18,10 +18,9 @@ def getter_fast(bakalariAPI: BakalariAPI) -> GetterOutput:
     session = bakalariAPI.session_manager.get_session_or_create(RequestsSession, True)
     response = session.get(bakalariAPI.get_endpoint(Endpoint.HOMEWORKS))
     session.busy = False
-    return GetterOutput(GetterOutput.Types.SOUP, Endpoint.HOMEWORKS, BeautifulSoup(response.content, "html.parser"))
+    return GetterOutput(Endpoint.HOMEWORKS, BeautifulSoup(response.content, "html.parser"))
 
-
-def get_slow(bakalariAPI: BakalariAPI, unfinished_only: bool = True, only_first_page: bool = False, first_loading_timeout: float = 5, second_loading_timeout: float = 10) -> ResultSet:
+def get_slow(bakalariAPI: BakalariAPI, unfinished_only: bool = True, only_first_page: bool = False, first_loading_timeout: float = 5, second_loading_timeout: float = 10) -> ResultSet: #type: ignore - Pylance si stěžuje, jelikož přepisujeme metodu (a jelikož to nemá speciální pravidlo, tak tenhle typ zpráv nejde vypnout) eShrug
     """Získá dané domácí úkoly."""
 
     #TODO: Page size param
@@ -40,7 +39,7 @@ def get_slow(bakalariAPI: BakalariAPI, unfinished_only: bool = True, only_first_
 
     while True:
         source = session.session.page_source
-        temp_result = parser(GetterOutput(GetterOutput.Types.SOUP, Endpoint.HOMEWORKS, BeautifulSoup(source, "html.parser")))
+        temp_result = parser(GetterOutput(Endpoint.HOMEWORKS, BeautifulSoup(source, "html.parser")))
 
         if temp_result.retrieve_type(Homework)[0].ID == checkID:
             # Očividně tedy selhalo pozorovnání loading obrazovky a parsujeme stejnou stránku dvakrát, takže cyklus ukončujeme
@@ -76,11 +75,15 @@ if not _HAVE_SELENIUM:
         raise exceptions.NoSeleniumException
 
 
-@BakalariAPI.register_parser(Endpoint.HOMEWORKS)
-def parser(getter_output: GetterOutput) -> ResultSet:
+@BakalariAPI.register_parser(Endpoint.HOMEWORKS, BeautifulSoup)
+def parser(getter_output: GetterOutput[BeautifulSoup]) -> ResultSet:
     """Parsuje získanou stránku s domácími úkoly a vrací parsované úkoly."""
     output = ResultSet()
-    rows = getter_output.data.find(id="grdukoly_DXMainTable").find("tbody")("tr", recursive=False)
+    table = getter_output.data.find(id="grdukoly_DXMainTable")
+    tmp = table.find("tbody")
+    if tmp is not None: # Jelikož to jsou Bakaláři, tak mají 2 rozdílné struktury :); poprvé jsou řádky přímo v <table>, podruhé ještě navíc v <tbody>
+        table = tmp
+    rows = table("tr", recursive=False)
     for row in rows[1:]:
         # První je hlavička tabulky (normálně bych se divil, proč tu není <thead> a <tbody> (jako u jiných tabulek), ale jsou to Bakaláři, takže to jsem schopnej pochopit)
         tds = row("td")

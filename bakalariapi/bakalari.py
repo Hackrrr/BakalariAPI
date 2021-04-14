@@ -9,18 +9,16 @@ Tento modul primárně implementuje:
     Looting - Třída starající se o persistenci, uchování a částečné zpracování výsledků
 """
 
-
 from __future__ import annotations
 
 import atexit
-import inspect
 import json
 import sys
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from enum import Enum
 from multiprocessing import Lock
-from typing import Type, Union
+from typing import Any, Callable, Generic, Type, TypeVar
 
 import requests
 from bs4 import BeautifulSoup
@@ -28,32 +26,14 @@ from bs4 import BeautifulSoup
 _HAVE_SELENIUM = False
 try:
     from selenium import webdriver
+    from selenium.webdriver.remote.webdriver import WebDriver
     _HAVE_SELENIUM = True
 except ImportError:
     pass
 
 #TODO: logging module
-#TODO: Projet všechny proměnné s časy a převést je na non-aware (= naive) datetime
-# Zde bylo rozhodování mezi timestamp, naive datetime a aware datetime. Proč tedy vyhrál naive datetime? No...
-# 1. timestamp < naive datetime         - Mělo by to být "ekvivaletní" (tzn. bez ztrát přesnosti), ale u datetimu máme navíc nějaký fancy funkce
-# 2. aware datetime < naive datetime    - Nevím, jestli je vážně aware horší (nejspíše ne), ale nechci to do něj převádět, protože pásma OMEGALUL
-#TODO: Přibyl klíč MeetingProviderId v detailech schůzky (od poslední verze (1.37.*)) + nové okénko v UI (kde se schůzka konná (př. MS Teams)); Hodnota je číslo => Někde je JS na konverzi čísla do "produktu" => seznam
-# Nalezeno - Přidal se script tag před script tag, který hledáme kvůli studentům - Definuje objekt 'Dictionaries', kde je klíč 'MeetingProvider', kde je array, jejíž indexy se shodují s ID "providera" - Máme tu Google Meet, MS Teams a None :)
-# Řádek 103 - 111 (v MeetingsOverview (normální stránka))
-#TODO: Vytvoření parametrického session dekorátor, který by řešil sessiony:
-# Nice to have featura by totiž byla taková, že bych mohl přes argument funkce v (bakalariAPI) modulu určit session, která by se použila
-# K tomu by mohl sloužit parametrický dekorátor, který by vzal jako parametr session classu a obalil by funkci:
-#   1. Ověřením, zda se passuje nějaká session - Jestli ano, nic se neděje. Jesli ne, vytvoří se (resp. vyžádá se jedna od session manageru) a passuje se ta
-#   2. Nastavením "busy" na sessionu (pokud už není)
-#   3. Odnastavením "busy" na sessionu
-# Nutno podotknout, že by se muselo více domyslet (od)nastavení "busy" atributu. Pravděpodobně nějak takto:
-#   Session je dána:
-#       Pokud je nastaveno "busy", nech "busy" i po skončení
-#       Pokud není, nastav a následně odnastav
-#   Session se musí vyžádat od session manageru:
-#       Vyžádá se session s "setBusy = True" a po skončení se odnastavý
 
-LAST_SUPPORTED_VERSION = "1.37.208.1"
+LAST_SUPPORTED_VERSION = "1.39.408.1"
 
 class Browser(Enum):
     """Enum prohlížečů/browserů podporovaných Seleniem"""
@@ -64,7 +44,7 @@ class Browser(Enum):
     OPERA = 4
     IE = 5
 class SeleniumHandler:
-    """    Třída obsahujcí nastavení pro Selenium.
+    """Třída obsahujcí nastavení pro Selenium.
     """
     def __init__(self, browser: Browser, executable_path: str = "", params: dict = {}):
         if "selenium" not in sys.modules:
@@ -72,7 +52,7 @@ class SeleniumHandler:
         self.browser: Browser = browser
         self.executable_path: str = executable_path
         self.params: dict = params
-    def open(self, try_silent: bool = True) -> webdriver:
+    def open(self, try_silent: bool = True) -> WebDriver:
         #try_silent = False # DEBUG LINE ONLY - SHOULD BE COMMENTED
         #TODO: Get rid of console logs...
         path = {"executable_path":self.executable_path} if self.executable_path != "" and self.executable_path is not None else {}
@@ -120,11 +100,11 @@ class Endpoint():
 Endpoint._ENDPOINT_DICT = {name:path for name,path in Endpoint.__dict__.items() if not name.startswith("_")} # pylint: disable=protected-access
 
 class ResultSet:
-    def __init__(self, loot: Union[BakalariObject, list[BakalariObject]] = None):
+    def __init__(self, loot: BakalariObject | list[BakalariObject] = None):
         self.data: dict[str, list[BakalariObject]] = {}
         if loot is not None:
             self.add_loot(loot)
-    def add_loot(self, loot: Union[BakalariObject, list[BakalariObject]]) -> ResultSet:
+    def add_loot(self, loot: BakalariObject | list[BakalariObject]) -> ResultSet:
         """Přidá loot do tohoto ResultSetu.
 
         Args:
@@ -136,26 +116,29 @@ class ResultSet:
         for o in loot:
             self.data.setdefault(type(o).__name__, []).append(o)
         return self
-    def retrieve_type(self, _type: Type[BakalariObject]) -> list[BakalariObject]:
+    def retrieve_type(self, _type: Type[BakalariObj]) -> list[BakalariObj]:
         t = _type.__name__
-        return self.data[t] if t in self.data else []
-    def merge(self, result_set: ResultSet):
+        if t in self.data:
+            return self.data[t] #type: ignore - Pylance nechápe, že bound=BakalariObject znamená, že to vlastně je BakalariObject eShrug
+        else:
+            return []
+        #return self.data[t] if t in self.data else []
+    def merge(self, result_set: ResultSet) -> ResultSet:
         for (t, lst) in result_set.data.items():
             self.data[t] = self.data.setdefault(t, []) + lst
-    def remove(self, _type: Type[BakalariObject]):
+        return self
+    def remove(self, _type: Type[BakalariObject]) -> ResultSet:
         try:
-            del self.data[_type]
+            del self.data[_type.__name__]
         except KeyError:
             pass
-class GetterOutput:
-    class Types(Enum):
-        SOUP = 0
-        JSON = 1
-    def __init__(self, type_: Types, endpoint: str, data):
-        self.type: GetterOutput.Types = type_
+        return self
+GetterOutputTypeVar = TypeVar("GetterOutputTypeVar", BeautifulSoup, dict)
+class GetterOutput(Generic[GetterOutputTypeVar]):
+    def __init__(self, endpoint: str, data: GetterOutputTypeVar):
         self.endpoint: str = endpoint
-        #                    SOUP        JSON
-        self.data: Union[BeautifulSoup, object] = data
+        self.data: GetterOutputTypeVar = data
+        self.type: Type[GetterOutputTypeVar] = type(data) 
 
 class BakalariSession(ABC):
     """Základní (abstraktní) classa pro typy sessionů.
@@ -176,7 +159,7 @@ class BakalariSession(ABC):
             self.login()
 
     @abstractmethod
-    def get_session_info(self) -> object:
+    def get_session_info(self) -> dict:
         pass
 
     def get_remaining(self) -> int:
@@ -209,7 +192,7 @@ class RequestsSession(BakalariSession):
         if nice:
             self.session.get(self.bakalariAPI.get_endpoint(Endpoint.LOGOUT))
         self.session.close()
-    def get_session_info(self) -> object:
+    def get_session_info(self) -> dict:
         return self.session.get(self.bakalariAPI.get_endpoint(Endpoint.SESSION_INFO)).json()
     def login(self) -> bool:
         return self.session.post(self.bakalariAPI.get_endpoint(Endpoint.LOGIN), {
@@ -217,7 +200,7 @@ class RequestsSession(BakalariSession):
             "password": self.bakalariAPI.password
         }).url != self.bakalariAPI.get_endpoint(Endpoint.LOGIN)
     def is_logged(self) -> bool:
-        pass #TODO: This
+        raise NotImplementedError()
 
     def get(self, *args, **kwargs) -> requests.Response:
         return self.session.get(*args, **kwargs)
@@ -227,14 +210,16 @@ class SeleniumSession(BakalariSession):
     #TODO: Zde mi přijde, že je možná hromada optimalizace - Webdriver můžeme nechat na pokoji a používat jen request modul,
     # abychom nemuseli čekat na webdriver. Teoreticky bychom mohli vytvořit interní RequestSession, kterému by byly přidány jen cookies
     # a přes něj by jsme mohli dělat "util" věci (extend, login, is_logged, ...)
+    #BTW Potřebujeme dodělat tuhle classu :)
     def __init__(self, bakalariAPI: BakalariAPI, setBusy: bool = True, login: bool = True):
         if not _HAVE_SELENIUM:
-            raise Exception
-        self.session: webdriver = bakalariAPI.selenium_handler.open()
+            raise exceptions.NoSeleniumException()
+        self.session: WebDriver = bakalariAPI.selenium_handler.open()
         super().__init__(bakalariAPI, setBusy)
         
-    def get_session_info(self) -> object:
-        return json.loads(self.session.get(self.bakalariAPI.get_endpoint(Endpoint.SESSION_INFO)))
+    def get_session_info(self) -> dict:
+        #return json.loads(self.session.get(self.bakalariAPI.get_endpoint(Endpoint.SESSION_INFO)))
+        raise NotImplementedError()
     def extend(self):
         self.session.get(self.bakalariAPI.get_endpoint(Endpoint.SESSION_EXTEND))
     def kill(self, nice = True):
@@ -252,12 +237,8 @@ class SeleniumSession(BakalariSession):
         self.session.find_element_by_id("loginButton").click()
         return self.session.current_url != self.bakalariAPI.get_endpoint(Endpoint.LOGIN)
     def is_logged(self) -> bool:
-        pass #TODO: This
-if not _HAVE_SELENIUM:
-    class SeleniumSession(): # pylint: disable=function-redefined
-        """'Falešná' SeleniumSession třída, která nahrazuje skutečnou v případě, že chybí Selenium"""
-        def __init__(self):
-            raise exceptions.NoSeleniumException()
+        raise NotImplementedError()
+Session = TypeVar("Session", bound=BakalariSession)
 
 class SessionManager:
     """Classa, která spravuje sessiony.
@@ -269,13 +250,14 @@ class SessionManager:
             Slovník, který obsahuje všechny sessiony pod správou tohoto SessionMannageru.
             Klič je typ sessionu jako string (tedy název classy sessionu) a hodnota je list sessionů tohoto typu.
     """
+
     def __init__(self, ref: BakalariAPI):
         self.__lock = Lock()
         self.bakalariAPI: BakalariAPI = ref
-        self.sessions: dict[str, list[BakalariSession]] = {}
+        self.sessions: dict[Type[BakalariSession], list[BakalariSession]] = {}
         atexit.register(self.kill_all, False)
 
-    def create_session(self, session_class: Type[BakalariSession], set_busy = True) -> BakalariSession:
+    def create_session(self, session_class: Type[Session], set_busy = True) -> Session:
         """Vytvoří novou session daného typu a navrátí ji.
 
         Pozn.:
@@ -290,7 +272,7 @@ class SessionManager:
         session = session_class(self.bakalariAPI, set_busy)
         self.register_session(session)
         return session
-    def get_session(self, session_class: Type[BakalariSession], set_busy = True, filter_busy = True) -> BakalariSession:
+    def get_session(self, session_class: Type[Session], set_busy = True, filter_busy = True) -> Session | None:
         """Navrátí (volnou) session daného typu. Pokud taková neexistuje, vrátí None.
 
         Argumenty:
@@ -308,11 +290,11 @@ class SessionManager:
             for session in self.sessions[session_class]:
                 if not (filter_busy and session.busy):
                     session.busy = set_busy
-                    return session
+                    return session #type: ignore - Pylance nechápe, že bound=BakalariSession znamená, že to vlastně je BakalariSession eShrug
         finally:
             self.__lock.release()
         return None
-    def get_session_or_create(self, session_class: Type[BakalariSession], set_busy = True, filter_busy = True) -> BakalariSession:
+    def get_session_or_create(self, session_class: Type[Session], set_busy = True, filter_busy = True) -> Session:
         """Navrátí (volnou) session daného typu. Pokud taková neexistuje, vrátí None.
 
         Argumenty:
@@ -354,7 +336,7 @@ class SessionManager:
             return True
         return False
 
-    def kill_all(self, nice: bool = True, session_class: Type[BakalariSession] = None):
+    def kill_all(self, nice: bool = True, session_class: Type[Session] | None = None):
         """Ukončí všechny sessiony.
 
         Argumenty:
@@ -367,8 +349,8 @@ class SessionManager:
         self.__lock.acquire()
         try:
             if session_class is None:
-                for session_class in self.sessions:
-                    for session in self.sessions[session_class]:
+                for sessions in self.sessions.values():
+                    for session in sessions:
                         session.kill(nice)
                 self.sessions = {}
             else:
@@ -377,7 +359,7 @@ class SessionManager:
                 del self.sessions[session_class]
         finally:
             self.__lock.release()
-    def kill_dead(self, session_class: Type[BakalariSession] = None):
+    def kill_dead(self, session_class: Type[Session] | None = None):
         """Ukončí všechny sessiony, které jsou již odhlášeni z Bakalářů.
 
         Argumenty:
@@ -387,14 +369,14 @@ class SessionManager:
         self.__lock.acquire()
         try:
             if session_class is None:
-                for session_class in self.sessions:
-                    for session in self.sessions[session_class]:
-                        if not session.IsLogged():
+                for sessions in self.sessions.values():
+                    for session in sessions:
+                        if not session.is_logged():
                             session.kill(False)
                             self.unregister_session(session)
             else:
                 for session in self.sessions[session_class]:
-                    if not session.IsLogged():
+                    if not session.is_logged():
                         session.kill(False)
                         self.unregister_session(session)
         finally:
@@ -403,7 +385,7 @@ class SessionManager:
 class BakalariAPI:
     """Hlavní třída BakalářiAPI. Pro normální použití stačí pouze tato classa.
 
-    Atributy:
+    Attributes:
         username:
             Jméno pro přihlášení do Bakalářů.
         password:
@@ -420,24 +402,31 @@ class BakalariAPI:
             Instance classy ServerInfo obsahující údaje o serveru a Bakalářích.
     """
 
-    # __getters: dict = {x:[] for x in Endpoint._ENDPOINT_DICT.values()} # pylint: disable=protected-access
-    __parsers: dict[str, list] = {x:[] for x in Endpoint._ENDPOINT_DICT.values()} # pylint: disable=protected-access
-    # Budeme tiše mlčet o tom, že tu máme dva "typy" parserů (HTML(= BeautifulSoup) a JSON (= object)) (vlastně i getterů)
-    # a předpokládat, že se trefíme vždy správně...
-    # Hele... Tyhle věci mají name mangling, takže by na to nikdo neměl vůbec šahat, pokud neví, co to dělá LULW
+    __parsers: dict[str, dict[Any, list[Callable[[GetterOutput], ResultSet]]]] = {x:{} for x in Endpoint._ENDPOINT_DICT.values()} # pylint: disable=protected-access
+    # Hele... Tyhle věci mají name mangling, takže by na to nikdo neměl vůbec šahat, pokud neví, co to dělá (takže bych na to něměl šahat ani já KEKW)
+    __resolvers: dict[Type[BakalariObject], list[Callable[[BakalariAPI, UnresolvedID], BakalariObject | None]]] = {}
 
-    __resolvers: dict[type, list] = {}
-
-    def __init__(self, url: str, username: str = None, password: str = None, seleniumHandler: SeleniumHandler = None):
+    def __init__(self, url: str, username: str = "", password: str = "", seleniumHandler: SeleniumHandler | None = None):
         self.username: str = username
         self.password: str = password
-        self.selenium_handler: SeleniumHandler = seleniumHandler
+        self.selenium_handler: SeleniumHandler | None = seleniumHandler
         self.session_manager: SessionManager = SessionManager(self)
-        self.looting: Looting = Looting()
+        self.looting: looting.Looting = looting.Looting()
         self.user_info: UserInfo = UserInfo()
         self.server_info: ServerInfo = ServerInfo(url)
     def get_endpoint(self, endpoint: str) -> str:
-        """Vrátí celou URL adresu daného endpointu"""
+        """Vrátí celou URL adresu daného endpointu.
+
+        Vrácenou URL generuje přidáním URL aplikace/serveru Bakalářů před adresu endpointu.
+
+        Args:
+            endpoint:
+                Adresa endpoinut.
+                Měla by být vždy získána přes Endpoint třídu, tedy Endpoint.NEJAKY_ENDPOINT.
+
+        Returns:
+            Celou URL endpointu.
+        """
         return self.server_info.url + endpoint
     def kill(self, nice: bool = True):
         """Ukončí všechny sessiony.
@@ -447,41 +436,157 @@ class BakalariAPI:
         Argumenty:
             nice:
                 Měly by se ukončit "mírumilovně"? (Default: True)
-                (Pro význam slova "mírumilovně" viz BakalariSession.kill())
+                ((Pro význam slova "mírumilovně" viz BakalariSession.kill()))
         """
         self.session_manager.kill_all(nice)
 
 
-    def get_fresh_grades(self, from_date: datetime = None) -> list[Grade]:
-        return self.__parse(modules.grades.getter(self, from_date)).retrieve_type(Grade)
+    def get_fresh_grades(self, from_date: datetime | None = None) -> list[Grade]:
+        """Nově načte a vrátí známky.
+
+        Args:
+            from_date:
+                Pokud není None, načtou se známky pouze od daného data (včetně).
+                Pokud je None, načtou se známky pouze ze současného pololetí.
+
+        Returns:
+            Nově načtený list známek.
+        """
+        return self._parse(modules.grades.getter(self, from_date)).retrieve_type(Grade)
     def get_fresh_all_grades(self) -> list[Grade]:
+        """Nově načte a vrátí všechny známky.
+
+        Returns:
+            Nově načtený list všech známek.
+        """
         return self.get_fresh_grades(from_date=datetime(1, 1, 1))
 
     def get_fresh_homeworks_fast(self) -> list[Homework]:
-        return self.__parse(modules.homeworks.getter_fast(self)).retrieve_type(Homework)
+        """Nově načte a vrátí úkoly.
+
+        Tato metoda vykoná načtení "rychle" (jelikož nevyužije Selenia), avšak zvládne načíst pouze prvních 20 aktivních nehotových úkolů.
+
+        Returns:
+            Nově načtený list úkolů.
+        """
+        return self._parse(modules.homeworks.getter_fast(self)).retrieve_type(Homework)
     def get_fresh_homeworks_slow(self, unfinished_only: bool = True, only_first_page: bool = False, first_loading_timeout: float = 5, second_loading_timeout: float = 10) -> list[Homework]:
+        """Nově načte a vrátí úkoly.
+
+        Tato metoda je pomalá. Pokud omezení metody `.get_fresh_homeworks_fast()` nejsou pro danou situaci omezující, zvažte její použití.
+
+        Args:
+            unfinished_only:
+                Pokud je True, načte pouze úkoly označené jako nehotové.
+                Pokud je False, načte hotové i nehotové úkoly.
+            only_first_page:
+                Pokud je True, načte úkoly jen z první stránky na Bakalářích.
+                Pokud je False, načte úkoly ze všech stránek.
+                Při užití metody je dobré zvážit, že načítání jednotlivých stránek úkolů je poměrně zdlouhavé.
+            first_loading_timeout:
+                Pro normální použití je vhodné nechat tak jak je.
+                Určuje počet sekund, během kterých se vyčkává na zahájení načítání stránky.
+                Pokud je číslo malé, je možné, že se nenačtou všechny úkoly.
+                Pokud je číslo příliš velké, je možné, že zde bude v určitých případech veliká ztráta času.
+            second_loading_timeout:
+                Pro normální použití je vhodné nechat tak jak je.
+                Určuje počet sekund, během kterých se vyčkává na skončení načítání stránky.
+                Pokud je číslo malé, je možné, že BakalářiAPI usoudí, že v Bakalářích došlo k chybě a nenačte všechny úkoly.
+                Pokud je číslo příliš velké, je možné, že zde bude v určitých případech veliká ztráta času.
+
+        Returns:
+            Nově načtený list úkolů.
+        """
         output = modules.homeworks.get_slow(self, unfinished_only, only_first_page, first_loading_timeout, second_loading_timeout)
         self.looting.add_result_set(output)
         return output.retrieve_type(Homework)
     def get_fresh_all_homeworks(self) -> list[Homework]:
+        """Nově načte a vrátí všechny úkoly.
+
+        Tato metoda je pomalá. Pokud omezení metody `.get_fresh_homeworks_fast()` nejsou pro danou situaci omezující, zvažte její použití.
+
+        Returns:
+            Nově načtený list všech úkolů.
+        """
         return self.get_fresh_homeworks_slow(unfinished_only=False, only_first_page=False)
 
     def get_fresh_meetings_future(self) -> list[Meeting]:
-        return self.__resolve(self.__parse(modules.meetings.getter_future_meetings_ids(self)).retrieve_type(UnresolvedID)).retrieve_type(Meeting)
+        """Nově načte a vrátí nadcházející schůzky.
+
+        Returns:
+            Nově načtený list nadcházejících schůzek.
+        """
+        return self._resolve(self._parse(modules.meetings.getter_future_meetings_ids(self)).retrieve_type(UnresolvedID)).retrieve_type(Meeting)
     def get_fresh_meetings(self, from_date: datetime, to_date: datetime) -> list[Meeting]:
-        return self.__resolve(self.__parse(modules.meetings.getter_meetings_ids(self, from_date, to_date))).retrieve_type(Meeting)
+        """Nově načte a vrátí schůzky.
+
+        Je nutné specifikovat horní i dolní časovou hranici. Nejmenší možný čas je `datetime(1, 1, 1)`, největší možný je `datetime(9999, 12, 31, 23, 59, 59)`.
+
+        Args:
+            from_date:
+                Určuje datum a čas, od kterého se mají schůzky načíst.
+            to_date:
+                Určuje datum a čas, do kterého se mají schůzky načíst.
+
+        Returns:
+            Nově načtený list schůzek.
+        """
+        return self._resolve(self._parse(modules.meetings.getter_meetings_ids(self, from_date, to_date))).retrieve_type(Meeting)
     def get_fresh_all_meetings(self) -> list[Meeting]:
-        self.get_fresh_meetings(datetime(1, 1, 1), datetime(9999, 12, 31, 23, 59, 59))
+        """Nově načte a vrátí všechny schůzky.
+
+        Returns:
+            Nově načtený list všech schůzek.
+        """
+        return self.get_fresh_meetings(datetime(1, 1, 1), datetime(9999, 12, 31, 23, 59, 59))
 
     def get_fresh_students(self) -> list[Student]:
-        return self.__parse(modules.meetings.getter_future_meetings_ids(self)).retrieve_type(Student)
+        """Nově načte a vrátí seznam studentů.
 
-    def get_fresh_komens(self, from_date: datetime = None, to_date: datetime = None) -> list[Komens]:
-        return self.__resolve(self.__parse(modules.komens.getter_komens_ids(self, from_date, to_date))).retrieve_type(Komens)
+        Returns:
+            Nově načtený list studentů.
+        """
+        return self._parse(modules.meetings.getter_future_meetings_ids(self)).retrieve_type(Student)
+
+    def get_fresh_komens(self, from_date: datetime | None = None, to_date: datetime | None = None, limit: int | None = None) -> list[Komens]:
+        """Nově načte a vrátí komens zprávy.
+
+        Kvůli limitaci Bakalářů je možné načíst pouze 300 zpráv na jednou.
+
+        Args:
+            from_date:
+                Pokud není None, načtou se komens zprávy pouze od daného data.
+                Pokue není None a parametr `to_date` je None, načtou se komens zprávy od daného data do současnosti.
+                Pokud oba parametry `from_date` a `to_date` jsou None, načtou se komens zprávy pouze za poslední měsíc.
+            to_date:
+                Pokud není None, načtou se komens zprávy pouze do daného data.
+                Pokue není None a parametr `from_date` je None, načtou se všechny komens zprávy do daného data.
+                Pokud oba parametry `from_date` a `to_date` jsou None, načtou se komens zprávy pouze za poslední měsíc.
+            limit:
+                Určuje limit, kolik zpráv se maximálně načte.
+                Při užití metody je dobré zvážit, že načítání jednotlivých zpráv je poměrně zdlouhavé.
+
+
+        Returns:
+            Nově načtený list komens zpráv.
+        """
+        return self._resolve(self._parse(modules.komens.getter_komens_ids(self, from_date, to_date)).retrieve_type(UnresolvedID)[:limit]).retrieve_type(Komens)
     def get_fresh_all_komens(self) -> list[Komens]:
+        """Nově načte a vrátí všechny komens zprávy.
+
+        Kvůli limitaci Bakalářů je možné načíst pouze 300 zpráv na jednou.
+
+        Returns:
+            Nově načtený list všech komens zpráv.
+        """
         return self.get_fresh_komens(datetime(1953, 1, 1), datetime.today() + timedelta(1))
 
     def is_server_running(self) -> bool:
+        """Zjistí, zda server/aplikace Bakalářů běží.
+
+        Returns:
+            True pokud server/aplikace běží, False pokud neběží.
+        """
         try:
             response = requests.get(self.server_info.url)
             response.raise_for_status()
@@ -489,6 +594,11 @@ class BakalariAPI:
             return False
         return True
     def is_login_valid(self) -> bool:
+        """Zjistí, zda jsou přihlašovací údaje správné.
+
+        Returns:
+            True pokud jsou přihlašovací údaje správné, False pokud nejsou.
+        """
         session = self.session_manager.get_session_or_create(RequestsSession)
         output = session.login()
         if not output:
@@ -498,6 +608,10 @@ class BakalariAPI:
             session.busy = False
         return output
     def init(self):
+        """Získá některé informace o systému Bakaláři a uživatelovi.
+
+        Volání této metody není nutné, avšak zatím není jiný způsob (resp. není implementován), jak tyto informace získat.
+        """
         session = self.session_manager.get_session_or_create(RequestsSession)
         data = json.loads(BeautifulSoup(session.get(self.get_endpoint(Endpoint.USER_INFO)).content, "html.parser").head["data-pageinfo"])
         self.user_info.type = data["userType"]
@@ -506,40 +620,83 @@ class BakalariAPI:
         self.server_info.version_date = datetime.strptime(data["appVersion"], "%Y%m%d")
         self.server_info.evid_number = int(data["evidNumber"])
         session.busy = False
-    def get_my_ID(self) -> str:
-        #TODO: This
-        #bakalariAPI.UserInfo.ID = ...
-        pass
+    # def get_my_ID(self) -> str:
+    #     #TODO: This
+    #     #bakalariAPI.UserInfo.ID = ...
+    #     return ""
 
     @classmethod
-    def register_parser(cls, endpoint: str):
-        def decorator(func):
-            cls.__parsers[endpoint].append(func)
-            # def wrapper(*args, **kwargs) -> ResultSet:
-            #     output = func(*args, **kwargs)
-            #     return output
-            # return wrapper
+    def register_parser(cls, endpoint: str, type_: Type[GetterOutputTypeVar]):
+        """Dekorátor, který zaregistruje funkci jako parser pro daný endpoint.
+
+        Pro běžné užití BakalářiAPI není doporučeno tento dekorátor používat.
+        Samotný dekorátor funkci nijak neupravuje.
+        Dekorovaná funkce by měla brát GetterOutput (typu, který se passuje jako argument `type_` tohoto dekorátoru) a měla by vracet ResultSet či None, pokud není schopná z daného GetterOutput(u) nic získat.
+
+        Args:
+            endpoint:
+                Endpoint, který daná funkce umí parsovat.
+            type_:
+                Typ generické třídy GetterOutput, který funkce přijímá.
+        """
+        # print(f"Endpoint:\t{endpoint}\nType:\t\t{type_}\nTypeVar:\t{GetterOutputTypeVar}\n")
+        def decorator(func: Callable[[GetterOutput[GetterOutputTypeVar]], ResultSet]):
+            cls.__parsers[endpoint].setdefault(type_, []).append(func)
             return func
         return decorator
     @classmethod
-    def register_resolver(cls, type_: Type[BakalariObject]):
-        def decorator(func):
+    def register_resolver(cls, type_: Type[BakalariObj]):
+        """Dekorátor, který zaregistruje funkci jako resolver pro daný typ.
+
+        Pro běžné užití BakalářiAPI není doporučeno tento dekorátor používat.
+        Samotný dekorátor funkci nijak neupravuje.
+        Dekorovaná funkce by měla brát UnresolvedID a měla by vracet typ, který se passuje v argumentu `type_` tohoto dekorátoru nebo None, pokud funkce není schopná resolvovat dané UnresovedID.
+
+        Args:
+            type_:
+                Typ/Třída, pro kterou je tato funkce resolverem.
+        """
+        def decorator(func: Callable[[BakalariAPI, UnresolvedID[BakalariObj]], BakalariObj]):
             cls.__resolvers.setdefault(type_, []).append(func)
             return func
         return decorator
 
-    def __parse(self, getter_output: GetterOutput) -> ResultSet:
+    def _parse(self, getter_output: GetterOutput[GetterOutputTypeVar]) -> ResultSet:
+        """Extrahují se data z GetterOutput insance za pomoci registrovaných parserů.
+
+        Pro běžné užití BakalářiAPI není doporučeno tuto funkci používat.
+        Data získaná skrze tuto metodu jsou automaticky ukládána v looting instanci.
+
+        Args:
+            getter_output:
+                GetterOutput, ze kterého se mají data extrahovat.
+
+        Returns:
+            ResultSet, který obsahuje všechna data od jednotlivých parserů.
+        """
         output = ResultSet()
-        for parser in self.__parsers[getter_output.endpoint]:
+        for parser in self.__parsers[getter_output.endpoint].setdefault(getter_output.type, []): #TODO: Můžeme to prosím incializovat někde na začátku, ať nemusíme volat setdefault?
             parser_output = parser(getter_output)
             if parser_output is not None:
                 output.merge(parser_output)
         self.looting.add_result_set(output)
         return output
-    def __resolve(self, unresolved: Union[UnresolvedID, list[UnresolvedID], ResultSet]) -> ResultSet:
+    def _resolve(self, unresolved: UnresolvedID | list[UnresolvedID] | ResultSet) -> ResultSet:
+        """Pokusí se získat plnohodnotný objekt pro dané UnresolvedID za pomoci registrovaných resolverů.
+
+        Pro běžné užití BakalářiAPI není doporučeno tuto funkci používat.
+        Data získaná skrze tuto metodu jsou automaticky ukládána v looting instanci.
+
+        Args:
+            unresolved:
+                Jedno nebo více UnresolvedID, pro které se BakalářiAPI pokusí získat plnohodnotný objekt.
+
+        Returns:
+            ResultSet, který obsahuje všechna data od jednotlivých resolverů.
+        """
         if isinstance(unresolved, ResultSet):
             output = unresolved
-            unresolved = unresolved.retrieve_type(UnresolvedID)
+            unresolved = output.retrieve_type(UnresolvedID)
             output.remove(UnresolvedID)
         else:
             output = ResultSet()
@@ -559,103 +716,8 @@ class BakalariAPI:
                     output.add_loot(o)
             else:
                 output.add_loot(o)
+        self.looting.add_result_set(output)
         return output
 
+from . import exceptions, modules, looting
 from .bakalariobjects import *
-from . import exceptions, modules
-
-
-class Looting:
-    """Třída obsatarávající sesbírané objekty pro pozdější použití.
-
-    Atributy:
-        data:
-            TODO: Doc
-    """
-    class JSONEncoder(json.JSONEncoder):
-        def default(self, o):
-            if isinstance(o, datetime):
-                return {
-                    #TODO: Format
-                    "_type":    "datetime",
-                    "value":    str(o)
-                }
-            if isinstance(o, BakalariObject):
-                output = dict(o.__dict__)
-                output["_type"] = type(o).__name__
-                if "Instance" in output:
-                    del output["Instance"]
-                return output
-            return super().default(o)
-    class JSONDecoder(json.JSONDecoder):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, object_hook=self.hook, **kwargs)
-        def hook(self, o):
-            if "_type" not in o:
-                return o
-            if o["_type"] == "datetime":
-                pass #TODO: datetime deserialization
-            # elif o["_type"] == "":
-            #     pass
-            else:
-                module = __import__(__name__)
-                if not hasattr(module, o["_type"]):
-                    raise TypeError("Unknown type to load; Type: " + o["_type"])
-                
-                #TODO: Wait... Mám takový nemilý pocit, že máme zranitelnost... OMEGALUL
-                # Jelikož tento modul obsahuje "os" (skrze bakalariobject wildcard import), tak je možné, že pokud bude
-                # hodnota "_type" nastavena na "os.system", tak .... jo. Problém... LULW (hodnoty z parsovaného objekt
-                # totiž bereme jako "paramater name":"value" pár a ten pak vkládáme do konstruktoru)
-                # Možný exploit tedy vypadá nějak takto: (ale jsem línej to testovat)
-                # {"_type":"os.system", "command":"start calc.exe"}
-                
-                class_constructor = getattr(module, o["_type"])
-                signature = inspect.signature(class_constructor)
-                supply_list = []
-                for param in signature.parameters:
-                    param = param.lstrip("_") #TODO: Remove?
-                    # print(f"Trying to add '{param}'...")
-                    if param in o:
-                        supply_list.append(o[param])
-                        # print(f"Added '{param}' with value '{data[param]}'")
-                # print(f"In signature: {len(signature.parameters)}; In supply_list: {len(supply_list)}")
-                return class_constructor(*supply_list)
-                #print("Adding new object to Loot (" + class_constructor.__name__ + ")")
-
-    def __init__(self):
-        self.__lock = Lock()
-        self.data: dict[str, dict[str, BakalariObject]] = {}
-        # Proč máme "root" key jako 'str' a ne jako 'type'? V runtimu asi lepší to mít jako 'type', ale při serializaci
-        # nechci řešit nemožnost serializovat typ 'type' a při deserializaci nechci konvertovat něco (= typ, jako který
-        # se to serializuje) zpátky na 'type'. Navíc I guess, že když __name__ je atribut, tak to prakticky nezabere nic.
-        self.unresolved: list[UnresolvedID] = []
-    
-    def __add_one(self, o: BakalariObject):
-        #TODO: Remove unresolved if resolved
-        if isinstance(o, UnresolvedID):
-            self.unresolved.append(o)
-        else:
-            self.data.setdefault(type(o).__name__, {})[o.ID] = o
-
-    def add_loot(self, loot: Union[BakalariObject, list[BakalariObject]]):
-        if not isinstance(loot, list):
-            loot = [loot]
-        self.__lock.acquire()
-        try:
-            for o in loot:
-                self.__add_one(o)
-        finally:
-            self.__lock.release()
-    def add_result_set(self, result_set: ResultSet):
-        for lst in result_set.data.values():
-            self.add_loot(lst)
-            # Jsem myslel, že to bude o trochu víc komplexnejší (jako třeba přeskočení resolvování typů) ale dopadlo to takhle KEKW
-
-
-    def export_JSON(self, *args, **kwargs):
-        return json.dumps(self.data, cls=self.JSONEncoder, *args, **kwargs)
-
-    def import_JSON(self, json_string: str, *args, **kwargs):
-        self.data = json.loads(json_string, cls=self.JSONDecoder, *args, **kwargs)
-
-    #TODO: Merge loots

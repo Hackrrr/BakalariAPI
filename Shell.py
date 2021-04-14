@@ -6,6 +6,7 @@ from __future__ import annotations
 #import abc
 import re
 import argparse
+import traceback
 
 class ShellArgumentParser(argparse.ArgumentParser):
     def error(self, message):
@@ -17,22 +18,22 @@ class ShellArgumentParser(argparse.ArgumentParser):
     #     pass
 
 class Command:
-    def __init__(self, name: str, callback, argparser: argparse.ArgumentParser = None, short_help: str = "", aliases: list[str] = [], spread_arguments = False):
+    def __init__(self, name: str, callback, *, argparser: argparse.ArgumentParser = None, short_help: str = "", aliases: list[str] = [], spread_arguments = False):
         self.name: str = name
-        self.argparser: argparse.ArgumentParser = argparser
-        if self.argparser != None:
+        self.argparser: argparse.ArgumentParser | None = argparser
+        if self.argparser is not None:
             self.argparser.prog = name
         self.callback = callback #Passing dict with values from Argparser
         self.short_help: str = short_help
         self.aliases: list[str] = aliases
         self.SPREAD_ARGUMENTS = spread_arguments
 
-    # def Invoke(self, argumentList: list):
-    #     self(*argumentList)
-    def __call__(self, *args):
+    def __call__(self, name: str = "", *args):
         if self.argparser is None:
             self.callback()
         else:
+            if name:
+                self.argparser.prog = name
             try:
                 try:
                     parsed = self.argparser.parse_args(args)
@@ -45,6 +46,7 @@ class Command:
                     self.callback(**parsed.__dict__)
                 else:
                     self.callback(parsed)
+            self.argparser.prog = self.name
 
 class Shell:
     Regex: re.Pattern = re.compile(r"(?<=\s)(?:((?:(?<!\\)\".+?(?<!\\)\")|(?:(?<!\\)'.+?(?<!\\)'))|((?:.(?<!\s))+?))(?=\s|$)")
@@ -70,7 +72,7 @@ class Shell:
         self.FIRST_COMMAND_CASE_SENSITIVE: bool = first_command_case_sensitive
         self.ALLOW_SHORTHANDS: bool = allow_shorhands
         self.ALLOW_PYTHON_EXEC: bool = allow_python_exec
-        self.PYTHON_EXEC_PREFIX: str = python_exec_prefix
+        self.PYTHON_EXEC_PREFIX: str | None = python_exec_prefix
         self.PYTHON_EXEC_GLOBALS: dict = python_exec_globals
         self.PYTHON_EXEC_LOCALS: dict = python_exec_locals
         self.EXIT_ON_CTRL_C: bool = exit_on_ctrlc
@@ -85,13 +87,12 @@ class Shell:
             generate_commands = []
 
         for command in generate_commands:
-            if command == "help" or command == "?":
+            if command in ("help", "?"):
                 self.add_command(Command(
                     "help",
                     self.print_help,
-                    None,
-                    "Zobrazí nápovědu",
-                    ["?"]
+                    short_help="Zobrazí nápovědu",
+                    aliases=["?"]
                 ))
             elif command == "prompt":
                 parser = ShellArgumentParser()
@@ -103,17 +104,16 @@ class Shell:
                     Command(
                         "prompt",
                         self.change_prompt,
-                        parser,
-                        "Změní prompt text",
+                        argparser=parser,
+                        short_help="Změní prompt text",
                         spread_arguments=True
                     )
                 )
             elif command == "exit":
                 self.add_command(Command(
                     "exit",
-                    self.exit_loop,
-                    None,
-                    "Ukončí shell"
+                    self.stop_loop,
+                    short_help="Ukončí shell"
                 ))
             # else:
             #     raise Exception("Unknown command to generate")
@@ -133,9 +133,9 @@ class Shell:
         first = parsed.pop(0)
         if not self.FIRST_COMMAND_CASE_SENSITIVE:
             first = first.lower()
-        if not self.ALLOW_SHORTHANDS:
+        if not self.ALLOW_SHORTHANDS: #TODO: Mám takovej dojem, že tahle větev nepočítá s aliasi
             if first in self.commands:
-                self.commands[first](*parsed)
+                self.commands[first](first, *parsed)
             else:
                 if self.ALLOW_PYTHON_EXEC and self.PYTHON_EXEC_PREFIX is None:
                     print(python_exec(string, self.PYTHON_EXEC_GLOBALS, self.PYTHON_EXEC_LOCALS))
@@ -148,11 +148,11 @@ class Shell:
                 for command_name in [command.name] + command.aliases:
                     if command_name.startswith(first):
                         if len(first) == len(command_name):
-                            full_match = command
+                            full_match = (command_name, command)
                             break
-                        candidates.append(command)
+                        candidates.append((command_name, command))
             if full_match is not None:
-                full_match(*parsed)
+                full_match[1](full_match[0], *parsed)
             else:
                 candidates_count = len(candidates)
                 if candidates_count == 0:
@@ -161,11 +161,11 @@ class Shell:
                     else:
                         print(f"Neznámý příkaz '{string}'\nZkus napsat 'help' nebo '?' pro nápovědu")
                 elif candidates_count == 1:
-                    candidates[0](*parsed)
+                    candidates[0][1](candidates[0][0], *parsed)
                 else:
                     print("Nejednoznačný příkaz; Možní kándidáti:")
                     for candidate in candidates:
-                        print("%-20s %s" % (candidate.name, candidate.short_help))
+                        print("%-20s %s" % (candidate[0], candidate[1].short_help))
 
     def print_help(self):
         print("Možné příkazy:")
@@ -195,7 +195,7 @@ class Shell:
             if self.EXIT_ON_CTRL_C:
                 self.should_exit = True
 
-    def exit_loop(self): #TODO: Try find a way how to "terminate" input function (or do custom input system (by recording keys and have buffer for it)). Maybe we could raise some exception?
+    def stop_loop(self): #TODO: Try find a way how to "terminate" input function (or do custom input system (by recording keys and have buffer for it)). Maybe we could raise some exception?
         self.should_exit = True
 
     def parse_line(self, line: str) -> list[str]:
@@ -206,8 +206,8 @@ class Shell:
         return parsed
 
 def python_exec(string: str, globals_ = {}, locals_ = {}):
-    #TODO: Better python_exec() output
+    #TODO: Better python_exec() output and replace eval with exec
     try:
         return eval(string, globals_, locals_)
-    except Exception as e:
-        print(e)
+    except:
+        traceback.print_exc()

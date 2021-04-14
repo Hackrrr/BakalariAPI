@@ -1,23 +1,23 @@
-"""
-Modul obsahující většinu objektů z BakalariAPI.
+"""Modul obsahující většinu objektů z BakalariAPI.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import datetime
-from typing import Type
+from datetime import datetime, timedelta, timezone
+from typing import Type, TypeVar, Generic
 
 from bs4 import BeautifulSoup
 
 from .bakalari import BakalariAPI, Endpoint, RequestsSession
-from .utils import bs_get_text
+from .utils import bs_get_text, cs_timedelta, Serializable, T0, get_full_type_name, resolve_string
 
 __all__ = [
     "ServerInfo",
     "UserInfo",
 
     "BakalariObject",
+    "BakalariObj",
     "UnresolvedID",
 
     "BakalariFile",
@@ -25,10 +25,12 @@ __all__ = [
     "HomeworkFile",
     "Komens",
     "Grade",
+    "MeetingProvider",
     "Meeting",
     "Student",
     "Homework",
 ]
+
 
 class ServerInfo():
     """Třída obsahující informace o samotném systému Bakaláři.
@@ -44,11 +46,11 @@ class ServerInfo():
         evid_number:
             Evidenční číslo verze Bakalářů.
     """
-    def __init__(self, url: str, bakalariVersion: str = "", bakalariVersionDate: datetime = None, bakalariEvidNumber: int = None):
+    def __init__(self, url: str, bakalariVersion: str = "", bakalariVersionDate: datetime | None = None, bakalariEvidNumber: int | None = None):
         self.url: str = url
         self.version: str = bakalariVersion
-        self.version_date: datetime = bakalariVersionDate
-        self.evid_number: int = bakalariEvidNumber
+        self.version_date: datetime | None = bakalariVersionDate
+        self.evid_number: int | None = bakalariEvidNumber
 class UserInfo():
     """Třída obsahující informace o uživatelovi.
 
@@ -67,7 +69,7 @@ class UserInfo():
         self.hash: str = userHash
         self.ID: str = userID
 
-class BakalariObject(ABC):
+class BakalariObject(Serializable, ABC):
     """Základní třída pro objekty parsované z Bakalářů (kromě tříd ServerInfo a UserInfo).
 
     Atributy:
@@ -80,20 +82,39 @@ class BakalariObject(ABC):
     @abstractmethod
     def format(self) -> str:
         """Vrátí text vhodný pro zobrazení uživatelovi aplikace/BakalariAPI."""
-class UnresolvedID(BakalariObject):
-    """Třída/objekt držící ID, které bylo získáno, ale zatím k němu byl získán objekt.
+    def serialize(self) -> dict:
+        return dict(self.__dict__)
+    @classmethod
+    def deserialize(cls: Type[T0], data: dict) -> T0:
+        new = cls.__new__(cls) #type: ignore - Protože Pylance z nějakého důvodu není schopný pochopit, že Type[T0] má obv __new__ metodu eShrug
+        for k, v in data.items():
+            if hasattr(new, k):
+                setattr(new, k, v)
+        return cls
+BakalariObj = TypeVar("BakalariObj", bound=BakalariObject)
+class UnresolvedID(BakalariObject, Generic[BakalariObj]):
+    """Třída/objekt držící ID, které bylo získáno, ale zatím k němu nebyl získán objekt.
 
     Atributy:
         type:
             Odhadovaný typ objektu, pro které je toto ID
     """
 
-    def __init__(self, ID: str, type_: Type[BakalariObject] = None):
+    def __init__(self, ID: str, type_: Type[BakalariObj]):
         super().__init__(ID)
-        self.type: Type[BakalariObject] = type_
+        self.type: Type[BakalariObj] = type_
     def format(self) -> str:
         return f"Nevyřešené ID '{self.ID}'" + ("" if self.type is None else " typu {self.type}")
 
+    def serialize(self) -> dict:
+        output = super().serialize()
+        output["type"] = get_full_type_name(self.type)
+        return output
+    @classmethod
+    def deserialize(cls: Type[T0], data: dict) -> T0:
+        output = super().deserialize.__func__(cls, data)
+        output.type = resolve_string(data["type"])
+        return output
 
 class BakalariFile(BakalariObject):
     """Třída/objekt držící informace o souboru/příloze na Bakalařích"""
@@ -144,7 +165,7 @@ class KomensFile(BakalariFile):
 class HomeworkFile(BakalariFile):
     """Třída/objekt držící informace o souboru/příloze k úkolu na Bakalařích"""
     def __init__(self, ID: str, name: str, homeworkID: str):
-        super().__init__(ID, name, None, None)
+        super().__init__(ID, name, 0, "")
         self.homeworkID: str = homeworkID
     def format(self) -> str:
         return (
@@ -155,7 +176,7 @@ class HomeworkFile(BakalariFile):
 
 class Komens(BakalariObject):
     """Třída/objekt držící informace o Komens (zprávě/zprách)"""
-    def __init__(self, ID: str, sender: str, content: str, time: datetime, confirm: bool, confirmed: bool, type_: str, files: list[KomensFile] = None):
+    def __init__(self, ID: str, sender: str, content: str, time: datetime, confirm: bool, confirmed: bool, type_: str, files: list[KomensFile]):
         super().__init__(ID)
         self.sender: str = sender
         self.content: str = content
@@ -206,9 +227,30 @@ class Grade(BakalariObject):
             f"Poznámka 2: {self.note2.strip()}"
         )
 
+
+class MeetingProvider(Serializable):
+    """Třída/objekt držící platformě/poskytovatelovi schůzky"""
+    BY_ID: dict[int, MeetingProvider] = {}
+    BY_KEY: dict[str, MeetingProvider] = {}
+    def __init__(self, id: int, key: str, label: str):
+        self.id: int = id
+        self.key: str = key
+        self.label: str = label
+        self.BY_ID[self.id] = self
+        self.BY_KEY[self.key] = self
+
+    def serialize(self) -> int:
+        return self.id
+    @classmethod
+    def deserialize(cls, data: int) -> MeetingProvider:
+        return MeetingProvider.BY_ID[data]
+MeetingProvider(0, "None", "žádný")
+MeetingProvider(1, "Microsoft", "Microsoft Office 365 for Education")
+MeetingProvider(2, "Google", "Google Meet")
+
 class Meeting(BakalariObject):
-    """Třída/objekt držící informace o známkách/klasifikaci"""                                                                                                                                        # ID + time
-    def __init__(self, ID: str, ownerID: str, name: str, content: str, start_time: datetime, end_time: datetime, joinURL: str, participants: list[tuple[str, str]], participants_read_info: list[tuple[str, datetime]]):
+    """Třída/objekt držící informace o známkách/klasifikaci"""
+    def __init__(self, ID: str, ownerID: str, name: str, content: str, start_time: datetime, end_time: datetime, joinURL: str, participants: list[tuple[str, str]], participants_read_info: list[tuple[str, datetime]], provider: MeetingProvider):
         super().__init__(ID)
         self.ownerID: str = ownerID
         self.name: str = name
@@ -218,18 +260,22 @@ class Meeting(BakalariObject):
         self.joinURL: str = joinURL
         self.participants: list[tuple[str, str]] = participants # ID, (Celé) Jméno
         self.participants_read_info: list[tuple[str, datetime]] = participants_read_info # ID, Čas přečtení
+        self.provider: MeetingProvider = provider
     @property
-    def owner_name(self):
+    def owner_name(self) -> str:
         """Jméno pořadatele schůzky"""
         for participant in self.participants:
             if participant[0] == self.ownerID:
                 return participant[1]
+        return ""
     def format(self) -> str:
+        delta = self.start_time - datetime.now(timezone.utc).astimezone()
         return (
             f"ID: {self.ID}\n"
             f"Pořadatel: {self.owner_name}\n"
-            f"Začátek: {self.start_time.strftime('%H:%M, %d. %m. %Y')}\n"
+            f"Začátek: {self.start_time.strftime('%H:%M, %d. %m. %Y')}{(' (začíná za ' + cs_timedelta(delta, 'dhm') + ')') if delta > timedelta(0) else (' (začíná nyní)' if delta == timedelta(0) else '')}\n"
             f"Konec:   {self.end_time.strftime('%H:%M, %d. %m. %Y')}\n"
+            f"Poskytovatel schůzky: {self.provider.label}\n"
             f"URL na připojení: {self.joinURL}\n"
             f"Název: {self.name.strip()}\n"
             "\n"
@@ -250,10 +296,10 @@ class Homework(BakalariObject):
     """Třída/objekt držící informace o domacím úkolu"""
     def __init__(self, ID: str, submission_date: datetime, subject: str, content: str, assignment_date: datetime, done: bool, files: list[HomeworkFile] = []):
         super().__init__(ID)
-        self.submission_date: datetime = submission_date
+        self.submission_date: datetime = submission_date #Pozn.: Tento datetime má správně pouze den a měsíc, jelikož nebyl zjištěn způsob, jak dostat rok (ten je defaultní hodnota datetime, tedy 1900)
         self.subject: str = subject
         self.content: str = content
-        self.assignment_date: datetime = assignment_date
+        self.assignment_date: datetime = assignment_date #Pozn.: Tento datetime má správně pouze den a měsíc, jelikož nebyl zjištěn způsob, jak dostat rok (ten je defaultní hodnota datetime, tedy 1900)
         self.done: bool = done
         self.files: list[HomeworkFile] = files
     def mark_as_done(self, bakalariAPI: BakalariAPI, value: bool = True):
@@ -264,13 +310,21 @@ class Homework(BakalariObject):
             #"studentId": studentID
         })
     def format(self) -> str:
+        if len(self.files) > 0:
+            soubory_text = ""
+            count = 0
+            for soubor in self.files:
+                soubory_text += f"  Soubor {count}: {soubor.name}\n"
+                count += 1
+        else:
+            soubory_text = "  Nejsou\n"
         return (
             f"ID: {self.ID}\n"
-            f"Datum odevzdaní: {self.submission_date.strftime('%d. %m.')}\n"
-            f"Datum zadání: {self.assignment_date.strftime('%d. %m.')}\n"
+            f"Datum odevzdaní: {self.submission_date.strftime('%d. %m. %Y')}\n" #{(' (do odevzdání zbývá ' + cs_timedelta(delta) + ')') if delta > timedelta(0) else ''}\n" #Protože nemáme rok, tak nevíme, jestli jsme v negativu nabo v pozitivu
+            f"Datum zadání: {self.assignment_date.strftime('%d. %m. %Y')}\n"
             f"Předmět: {self.subject}\n"
             f"Hotovo? {'Ano' if self.done else 'Ne'}\n"
-            f"Má soubory? {'Ano' if len(self.files) > 0 else 'Ne'}\n"
+            f"Soubory?\n{soubory_text}"
             "\n"
             f"{bs_get_text(BeautifulSoup(self.content, 'html.parser'))}"
         )

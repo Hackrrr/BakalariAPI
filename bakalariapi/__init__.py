@@ -13,7 +13,6 @@ exceptions - Vyjímky, které mohou nastat za běhu BakalářiAPI.
 from . import exceptions
 from .bakalari import *
 from .bakalariobjects import *
-#from .modules import *
+from .looting import Looting
 
 __all__ = ["BakalariAPI", "LAST_SUPPORTED_VERSION", "Looting", "SeleniumHandler", "Browser", "exceptions"]
-#No need to expose classes from bakalariobjects as they shouldn't be created "by hand" (resp. from anywhere else but BakalariAPI)
