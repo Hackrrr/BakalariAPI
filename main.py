@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-from test import Endpoint
 import multiprocessing
 import os
 import time
@@ -13,6 +12,7 @@ from datetime import datetime, timedelta, timezone # Here it comes... Timezone h
 # HA! Dělám si srandu. Padej to opravit! S láskou - Tvoje minulé já :)
 
 import bakalariapi
+from bakalariapi import Endpoint
 import shell
 
 parser = argparse.ArgumentParser(
