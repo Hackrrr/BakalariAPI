@@ -139,7 +139,7 @@ Sice je to náročnější scrapping, ale taky z toho můžeme získat o dost v�
 
 
 ## Extrakce dat 1 - HTML => JS => JSON
-No ale proč to dělat touto metodou? Vždyť tohle je úplně k ničemu, když máme jiný a lepší způsob... No - v tomto `<script>` tagu se nachází ještě seznam všech studentů na škole... Ano... **A absolutně nemám ponětí, co tam dělá, jelikož jsem nenarazil na jedinou věc, kde se používá...** Možná by se to mělo někomu nahlásit, ale já jsem línej to dělat. Každopádně nyní hledáme řádku začínající (opět po osekání mezer a tabů) `model.Students = ko.mapping.fromJS(`. Když ji najdeme a osekneme začátek a konec (tedy `");"`), tak získáme JSON studentů:
+No ale proč to dělat touto metodou? Vždyť tohle je úplně k ničemu, když máme jiný a lepší způsob... No - v tomto `<script>` tagu se nachází ještě seznam všech studentů na škole... Ano. Je to tak. **Absolutně nemám ponětí, co tam dělá, jelikož jsem nenarazil na jedinou věc, kde se používá, ale je tu eShrug.** Možná by se to mělo někomu nahlásit, ale já jsem línej to dělat. Každopádně nyní hledáme řádku začínající (opět po osekání mezer a tabů) `model.Students = ko.mapping.fromJS(`. Když ji najdeme a osekneme začátek a konec (tedy `");"`), tak získáme JSON studentů:
 ```JSON
 [
     {

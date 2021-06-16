@@ -6,17 +6,21 @@ from __future__ import annotations
 
 import sys
 from datetime import datetime, timedelta
-from typing import TypeVar, Protocol, runtime_checkable, Any
+from typing import Any, Protocol, TypeVar, runtime_checkable
 
 from bs4 import BeautifulSoup
+from requests.cookies import RequestsCookieJar
+from selenium.webdriver.remote.webdriver import WebDriver
 
 T0 = TypeVar("T0")
 T1 = TypeVar("T1")
 T2 = TypeVar("T2")
 
+
 def first2upper(string: str) -> str:
     """První znak ve stringu dá do Uppercase"""
     return string[0].upper() + string[1:]
+
 
 def string2datetime(string: str) -> datetime:
     """Pokusí se získat převést string na datum dle předdefinovaných formátů. Pokud neuspěje, vyhodí ValueError."""
@@ -24,7 +28,7 @@ def string2datetime(string: str) -> datetime:
         "%Y-%m-%d %H:%M:%S",
         "%Y-%m-%d %H:%M:%S%z",
         "%Y-%m-%d %H:%M:%ST%z",
-        "%Y-%m-%d"
+        "%Y-%m-%d",
     ]
     for date_format in formats:
         try:
@@ -33,15 +37,17 @@ def string2datetime(string: str) -> datetime:
             pass
     raise ValueError
 
+
 def line_iterator(text: str):
     """Slouží jako iterátor řádek pro text. (Vypůjčeno (resp. ukradeno) ze Stacku.)"""
     prevnl = -1
     while True:
-        nextnl = text.find('\n', prevnl + 1)
+        nextnl = text.find("\n", prevnl + 1)
         if nextnl < 0:
             break
-        yield text[prevnl + 1:nextnl]
+        yield text[prevnl + 1 : nextnl]
         prevnl = nextnl
+
 
 def bs_get_text(soup: BeautifulSoup) -> str:
     """BeautifulSoup.get_text(), ale tak trochu jinak
@@ -52,7 +58,7 @@ def bs_get_text(soup: BeautifulSoup) -> str:
         - Stripne text (Je to vůbec potřeba? eShrug)
     """
 
-    #TODO: Převést <p> na nové řádky
+    # TODO: Převést <p> na nové řádky
     for br in soup("br"):
         br.replace_with("\n" + br.text)
 
@@ -62,14 +68,17 @@ def bs_get_text(soup: BeautifulSoup) -> str:
 
     return soup.get_text().strip()
 
-def cs_timedelta(time: timedelta, order: str, skip_zero: bool = True) -> str:
+
+def cs_timedelta(
+    time: timedelta, order: str, skip_zero: bool = True, placeholder: str = "okamžik"
+) -> str:
     """Vrátí timedeltu slovně v češtině.
 
     Args:
         time:
             Časový rozdíl, který se má převést
         order:
-            Formát výstupu / Pořadí, ve kterém se jednotlivé části zapíší.
+            Formát výstupu / Pořadí, ve kterém se jednotlivé části zapíší, např. "dhm".
             Možné části:
                 d - Dny
                 h - Hodiny
@@ -82,6 +91,8 @@ def cs_timedelta(time: timedelta, order: str, skip_zero: bool = True) -> str:
         skip_zero:
             Pokud True, tak se přeskočí výpis hodnoty (resp. dané části), pokud je rovna nule.
             Pokud False, hodnota (resp. část) se napíše i přestože je rovna nule.
+        placeholder:
+            Pokud by výsledný string měl nulovou délku, tak se výstup nahradí tímto stringem.
     Returns:
         Český slovní popis vstupní timedelty.
 
@@ -91,7 +102,7 @@ def cs_timedelta(time: timedelta, order: str, skip_zero: bool = True) -> str:
     output = []
 
     microseconds = time.microseconds % 1000
-    #milisecods = (time.microseconds - microseconds) / 1000
+    # milisecods = (time.microseconds - microseconds) / 1000
     seconds = time.seconds % 60
     minutes = int(((time.seconds - seconds) / 60) % 60)
     hours = int((time.seconds - seconds - minutes * 60) / 3600)
@@ -99,7 +110,7 @@ def cs_timedelta(time: timedelta, order: str, skip_zero: bool = True) -> str:
 
     # Jasně, určitě šlo by tohle šlo udělat nějak pěkněji (např. mít tyto data třeba ve slovníku), ale pro jednou bych se držel KISS pravidla :)
     for char in order:
-        if char == 'd':
+        if char == "d":
             tmp = abs(days)
             if skip_zero and tmp == 0:
                 continue
@@ -108,8 +119,8 @@ def cs_timedelta(time: timedelta, order: str, skip_zero: bool = True) -> str:
             elif tmp <= 4 and tmp != 0:
                 output.append(f"{days} dny")
             else:
-                output.append(f"{days} dnů")    
-        elif char == 'h':
+                output.append(f"{days} dnů")
+        elif char == "h":
             tmp = abs(hours)
             if skip_zero and tmp == 0:
                 continue
@@ -119,7 +130,7 @@ def cs_timedelta(time: timedelta, order: str, skip_zero: bool = True) -> str:
                 output.append(f"{hours} hodiny")
             else:
                 output.append(f"{hours} hodin")
-        elif char == 'm':
+        elif char == "m":
             tmp = abs(minutes)
             if skip_zero and tmp == 0:
                 continue
@@ -129,7 +140,7 @@ def cs_timedelta(time: timedelta, order: str, skip_zero: bool = True) -> str:
                 output.append(f"{minutes} minuty")
             else:
                 output.append(f"{minutes} minut")
-        elif char == 's':
+        elif char == "s":
             tmp = abs(seconds)
             if skip_zero and tmp == 0:
                 continue
@@ -139,7 +150,7 @@ def cs_timedelta(time: timedelta, order: str, skip_zero: bool = True) -> str:
                 output.append(f"{seconds} sekundy")
             else:
                 output.append(f"{seconds} sekund")
-        elif char == 'f':
+        elif char == "f":
             tmp = abs(microseconds)
             if skip_zero and tmp == 0:
                 continue
@@ -152,7 +163,8 @@ def cs_timedelta(time: timedelta, order: str, skip_zero: bool = True) -> str:
         else:
             raise ValueError("Invalid order format")
 
-    return human_join(output)
+    return human_join(output) if len(output) > 0 else placeholder
+
 
 def human_join(lst: list, connector: str = ", ", last_connector: str = " a ") -> str:
     l = len(lst)
@@ -162,17 +174,24 @@ def human_join(lst: list, connector: str = ", ", last_connector: str = " a ") ->
         return str(lst[0])
     return connector.join(lst[:-1]) + last_connector + lst[-1]
 
+
 def line_modifier(text: str, prefix: str = "", suffix: str = "") -> str:
     lines = [f"{prefix}{line}{suffix}" for line in line_iterator(text)]
     return "\n".join(lines)
+
+
+class Empty(object):
+    pass
 
 @runtime_checkable
 class Serializable(Protocol[T0, T1]):
     def serialize(self: T1) -> T0:
         raise NotImplementedError()
+
     @classmethod
     def deserialize(cls, data: T0) -> T1:
         raise NotImplementedError()
+
 
 def resolve_string(string: str) -> Any:
     splitted = string.split(".")
@@ -189,5 +208,25 @@ def resolve_string(string: str) -> Any:
         except AttributeError:
             return None
     return pointer
+
+
 def get_full_type_name(t: type) -> str:
     return f"{t.__module__}.{t.__name__}"
+
+
+def cookies_webdriver2requests(webdriver: WebDriver) -> dict[str, str]:
+    return {entry["name"]: entry["value"] for entry in webdriver.get_cookies()}
+
+
+def cookies_requests2webdriver(cookies: RequestsCookieJar) -> list[dict[str, Any]]:
+    return [
+        {
+            "name": cookie.name,
+            "value": cookie.value,
+            "path": cookie.path,
+            "domain": cookie.domain,
+            "secure": cookie.secure,
+            #"expiry": cookie.expires # Protože nevím, jak si selenium poradí s případnou hodnotou None
+        }
+        for cookie in cookies
+    ]

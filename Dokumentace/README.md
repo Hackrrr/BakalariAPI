@@ -1,10 +1,11 @@
 # Dokumentace/Poznámky
-Zde (ve složce) by mělo být vše, co není kód (ale ten se tu taky místy vyskytuje). Od toho, co `BakalářiAPI` potřebuje ke spuštění až po to, jaký věci se vracejí z například `komens` enpointu. Pokud tě zajímají enpointy a Bakaláři samotný (jak fungujou a jak z nich dostaneme data co chceme), tak se podívej do složky `Bakaláři`.
+Zde (ve složce) by mělo být vše, co není kód (ale ten se tu taky místy vyskytuje). Od toho, co `BakalářiAPI` potřebuje ke spuštění až po to, jaký věci se vracejí z například `komens` enpointu. Pokud tě zajímají enpointy a Bakaláři samotný (jak fungujou a jak z nich dostaneme data co chceme), tak se podívej do složky ["Bakaláři"](Bakaláři/README.md).
 
 # Status
-Zatím toho tady moc není, ale teď toho víc psát nehodlám... Píšu to už čtvrtím dnem a už taky trochu šílím :) . Zatím je zdokumentováno následující:
+Zatím toho tady moc není, ale teď toho víc psát nehodlám... Zatím je zdokumentováno následující:
 - Co `BakalářiAPI` používá a proč
-- Kompletně enpointy, které `BakalářiAPI` používá
+- Interní věci v `BakalářiAPI`
+- Enpointy Bakalářů - kde jsou, co chtějí a co vracejí
 - A to je vše... Nic moc, že? Ale věř mi - napsat to byl pain LULW
 
 # Zprovozoznění a instalce aneb Co `BakalářiAPI` používají a proč to potřebují?
@@ -12,13 +13,13 @@ Zatím toho tady moc není, ale teď toho víc psát nehodlám... Píšu to už 
 ## TL;DR
 Nechceš to vše číst? V pořádku, já taky často nečtu tu hromadu nepodstatných věcí jako například takhle dlouhou a nesmyslnou větu, která actually nemá žádnej význam jelikož spící balvan chrápe zatímco na něm tancují veverky tanec dešťe aby přivovaly vítr...
 
-Anyways - TL;DR, potřebujeme nainstalovat `requests` a `bs4`, tedy napiš do příkazového řádku/terminálu toto:
+Anyways - TL;DR napiš do příkazového řádku/terminálu toto:
 ```
-pip install requests bs4
+pip install git+https://github.com/Hackrrr/BakalariAPI
 ```
-...a hotovo... Prakticky by to mělo fungovat, teoreticky nevím, ale měl by si být schopný spustit `main.py`:
+...a hotovo... Prakticky by to mělo fungovat, teoreticky nevím, ale měl by si být schopný spustit příkaz `bakalarishell` (odkudkoli):
 ```
-python main.py -h
+bakalarishell -h
 ```
 Ale počítej s tím, že pár věcí nebude fungovat (například získání úkolů) - pokud chceš i tyhle featury, budeš se muset trochu začíst...
 
@@ -59,8 +60,6 @@ WebDriver je technologie, která umožňuje ovládat vzdáleně prohlížeč - p
 Teď když máme takovej malej overview toho, co je to WebDriver, přejdeme k tomu, co je `Selenium`. `Selenium` je wraper, který nám umožňuje "normálně" ovládat WebDriver přes Python (a nejen pro Python - `Selenium` balíčky jsou i v JS (Node.js), C#, Java, ...). (Fun fact: `Selenium` tu bylo ještě před WebDriverem - prohlížeče tak nějak podporovaly vzdálené řízení, ale nebylo to standardizované. A pak se w3c rozhodlo toto standardizovat a tento standart vychází právě z API `Selenia`.) Nemusíme tedy řešit, jak se zapíná WebDriver pro každý prohlížeč (ale pořád musíme vědět, jak prohlížeč chceme používat a kde se nachází WebDriver program). Navíc nám poskytuje metody navíc, které nejsou v samotném standardu WebDriveru (protože WebDriver standart obsahuje pouze "atomické" příkazy).
 #### Proč tohle potřebujeme?
 Jak jsem psal na začátku - Bakaláři jsou Bakaláři... A používají všechno co našli. A bohužel používají i ASP.NET formuláře... pepeHands Ptáte se, co je to ASP.NET formulář? Nůže - ASP.NET formuláře jsou formuláře, kdy se na stranu serveru posílá stav všech (interaktivních) prvků - Inputy, tlačítka, posuvníky, pozice určitých elementů, něktré texty, ... A ten request, který se následně posílá je doslova hnus (nehledě na to, že většina těch věcí se nepoužívá). Ano... Dá se to nasimulovat - Přečíst všechny hodnoty všeho, nějak to seskládat a poslat request... Ale to opravdu dělat nechci. Jen se podívejte na request, který se provede, když přepnete stránku v úkolech a pak si myslím, že od toho taky odpustíte (a to jsem člověk, který tyhle výzvy klidně podstoupí, ale tohle je už moc (jakože nejspíš bych to nějak napsal, kdyby tu nebyla možnost WebDriveru a `Selenia`)). Jak tento problém řeší použití `Selenia`? Tak, že mi se vlastně přes `Selenium` tváříme jako uživatel (který vše dělá nejvyšší (ne)možnou rychlostí) a tím pádem nám běží i JS, který tyhle "ASP.NET requesty" vytváří. Takže můžeme "jen" "kliknout" na tlačítko a z výsledku vytáhnout to co chceme (přes `BeautifulSoup4`).
-#### Kdy tohle potřebujeme? Tedy co nemůžu udělat přes `BakalářiAPI` bez Selenia?
-Zatím, co jsem se koukal, tak jen úkoly a dokumenty (procházení dokumentů ještě implementováno není, ale úkoly ano).
 ### Instalace
 Opět - Balíček `Selenium` je dostupný přes `pip`:
 ```
@@ -72,19 +71,23 @@ Ovšem ještě je potřeba WebDriver... Kde WebDriver pro svůj prohlížeč naj
 - [Neoficiální dokumentace](https://selenium-python.readthedocs.io/) - Z tohoto zjistíte mnohem víc (jelikož z oficiální nezjistíte nic). Text v titlu "better than official" nelže. Já osobně jsem na sem nakouknul jen jednou.
 - Ještě zde uvedu toto - Nejvíce informací jsem dostal z prozkoumávání kódu `Selenia`. Sice jsem asi nepochytil, jak to má fungovat, ale našel jsem si (podle názvu) metody, které dělají to co potřebuji :) (tady actually pochválím oficiální dokumentaci, kde se píše "Use The Source Luke!")
 
-## Nefuguje to! REEEEEE Hází mi to chybu! babyRage
-Ok, ok, ok... Tak se zase uklidníme a poďme se podvívat, co je možná příčina problémů...
+## prompt-toolkit
+Modul `prompt-toolkit` je skvělý, úžásný a vše okolo, ale ... no... dokud si s tím nezačne někdo hrát trochu víc do hloubky (doslova). `prompt-toolkit` není použit v samotném `bakalariapi`, ale spíše v `bakalarishell`. Pomocí něj se značně usnadní tvorba pokročilých funkcí shellu jako je třeba histrie, hinting příkazů nebo třeba i nějaké barvičky. Problém je ale ten, že ačkoli je to super a báječný a další věci, tak určitý věci je pain řešit - třeba to, že vlastně nefungují zkratky (např. CTRL+V nebo CTRL+Backspace) či nejdou normální cestou vypnout zvuky (protože někdo dostal skvělý nádad je do toho dát) a nebo další divný věci jako třeba "natvrdo" dosazené prázdné řádky na spodku terminálu, které nejdou odstranit. Ale přesto to (zatím) je použito, protože implementovat vlastní hinting příkazů (od základu) by byl pain.
+### Instalace
+Opět a zase... Balíček `prompt-toolkit` je dostupný přes `pip`:
+```
+pip install prompt-toolkit
+```
+### Informace
+- [Oficiální dokumentace](https://python-prompt-toolkit.readthedocs.io/en/master/) - V pohodě stačí a ukáže základy, které pravděpodobně stejně všechny neužijete. Co se ale jedná interních věcí, tak se musí kouknout do zdroje, protože ta je tam upřímně strašná.
 
-Jelikož `BakalářiAPI` bylo psáno na Python 3.9 a já velice rád experimentální (a nové) featury (a pak toho dost často lituji... PepeLaugh ), tak je možné, že pár věcí nebude fungovat, pokud máš starší verzi Pythonu. Zatím vím jen o dvou chybách kompatibility:
-
-### enum34
-Pokud bude chyba vypadat nějak takto: `NameError: name 'Enum' is not defined`, tak pravděpodobně používaš Python starší jak 3.4 a chybí podpora enumerací (já psal, že máš použít minimálně 3.7 :) ). `BakalářiAPI` je používá (zatím) jen pro prohlížeče kvůli Seleniu. Fix by měl být jednoduchý - stačí nainstlovat balíček `enum34`:
+## rich
+`rich` je opět použit jen v `bakalarishell`u. To co nezvládne zobrazit `prompt-toolkit`, zvládne `rich`. Narozdíl od `prompt-toolkit`u je tohle spíš na rozbrazení než na nějakou interakci - ať už hodně pěkné zobrazení tracebacků, objektů (i s popisky), tak i na normální zobrazení textu (třeba higlight nějaké syntaxe).
+### Instalace
+Zase je dostupný přes `pip`:
 ```
-pip install enum34
+pip install rich
 ```
-
-### future
-Zde si nejsem jistý, zda se je to správné řešení, ale pokud se objevý chyba ve stylu: `TypeError: 'type' object is not subscriptable`, tak není **nejspíše** podpora anotací... Ale tento případ by podle mě už nastat neměl, protože by teoreticky měl spíše nastat toto: `ImporError: cannot import name 'annotations' from __future__` (tady jsem možná úplně mimo, takže to prosím berte s rezervou :) ). Každopádně pokud se to i tak ukáže, tak je řešení nainstalovat balíček `future`:
-```
-pip install future
-```
+### Informace
+- [Oficiální dokumentace](https://rich.readthedocs.io/en/stable/) - Stejně jako `prompt-toolkit` - poměrně pěkná, dobrý "turoriál", dost ukázek, které rozhodně všechny nevyužijete, ale jakmile dojde na "technické" věci, tak je nutnost si přečíst zdroj.
+- Ještě zmíním, že `rich` má dost pěkné ukázky - třeba chceš vidět jak formátuje tabulky? Napiš `python -m rich.table` a on ti to ukáže (já osobně jsem teda ještě nikdy neviděl, že by nějaká knohovna měla takhle intergrované ukázky a tohle je za mě extrémně super PagMan).
