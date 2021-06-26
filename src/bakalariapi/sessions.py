@@ -1,16 +1,18 @@
+"""Modul obsahující věci ohledně sessionů."""
+
 from __future__ import annotations
 
 import atexit
 import json
 from abc import ABC, abstractmethod
 from threading import Lock, Thread
-from typing import Type, TypeVar, cast, NoReturn
+from typing import Type, TypeVar, cast
 from time import sleep
 
 import requests
 from selenium.webdriver.remote.webdriver import WebDriver
 
-from . import utils
+from . import utils, exceptions
 from .bakalari import BakalariAPI, Endpoint
 
 
@@ -38,14 +40,14 @@ class BakalariSession(ABC):
     @abstractmethod
     def get_session_info(self) -> dict:
         """Získá a vrátí informace o současném sessionu.
-        
+
         Returns:
             Parsovaná JSON data (viz dokumentace o enpointu "session_info").
         """
 
     def get_remaining(self) -> int:
         """Získá a vrátí zbývající životnost sessionu.
-        
+
         Returns:
             Zbývající životnost sessionu.
         """
@@ -61,6 +63,11 @@ class BakalariSession(ABC):
         """
 
     def is_logged(self) -> bool:
+        """Zjistí, zda je session přihlášená.
+
+        Returns:
+            Pokud je session přihlášená, vrátí `True`, jinak `False`.
+        """
         # Implementace v závislosti na typu sessionu bude pravděpodobně rychlejší
         return self.get_remaining() != 0
 
@@ -71,7 +78,7 @@ class BakalariSession(ABC):
     @abstractmethod
     def kill(self, nice=True):
         """Ukončí session.
-        
+
         Args:
             nice:
                 Určuje, zda se session má z Bakalářů odhlásit.
@@ -88,22 +95,24 @@ class BakalariSession(ABC):
         Args:
             internval:
                 Interval obnovení sesisonu v sekundách.
-        
+
         """
         self._auto_extend = True
         while self._auto_extend:
             self.extend()
             sleep(interval)
+
     def stop_extend_loop(self):
         """Ukončí smyčku na obnovování životnosti sessionu.
-        
+
         Smyčce může trvat jeden cyklus (resp. dobu intervalu) než se ukončí.
         """
         self._auto_extend = False
-            
 
 
 class RequestsSession(BakalariSession):
+    """Session využívající `requests` modul."""
+
     def __init__(
         self, bakalariAPI: BakalariAPI, setBusy: bool = True, login: bool = True
     ):
@@ -137,25 +146,31 @@ class RequestsSession(BakalariSession):
                 "username": self.bakalariAPI.username,
                 "password": self.bakalariAPI.password,
             },
-            allow_redirects=False
+            allow_redirects=False,
         ).is_redirect
         self.busy = False
         return output
 
     def is_logged(self) -> bool:
         self.busy = True
-        response = self.session.get(self.bakalariAPI.get_endpoint(Endpoint.DASHBOARD), allow_redirects=False)
+        response = self.session.get(
+            self.bakalariAPI.get_endpoint(Endpoint.DASHBOARD), allow_redirects=False
+        )
         self.busy = False
         return not response.is_redirect
 
     def get(self, *args, **kwargs) -> requests.Response:
+        """Stejné jako `.session.get()`"""
         return self.session.get(*args, **kwargs)
 
     def post(self, *args, **kwargs) -> requests.Response:
+        """Stejné jako `.session.post()`"""
         return self.session.post(*args, **kwargs)
 
 
 class SeleniumSession(BakalariSession):
+    """Session využívající Selenium."""
+
     def __init__(
         self,
         bakalariAPI: BakalariAPI,
@@ -163,6 +178,8 @@ class SeleniumSession(BakalariSession):
         login: bool = True,
         enable_requests_acceleration: bool = True,
     ):
+        if bakalariAPI.selenium_handler is None:
+            raise exceptions.BakalariMissingSeleniumHandlerError()
         self.session: WebDriver = bakalariAPI.selenium_handler.open()
         self.requests_acceleration: bool = enable_requests_acceleration
         super().__init__(bakalariAPI, setBusy, login)
@@ -209,7 +226,7 @@ class SeleniumSession(BakalariSession):
                     "username": self.bakalariAPI.username,
                     "password": self.bakalariAPI.password,
                 },
-                allow_redirects=False
+                allow_redirects=False,
             )
             if output.is_redirect:
                 self.busy = True
@@ -228,10 +245,16 @@ class SeleniumSession(BakalariSession):
         else:
             self.busy = True
             self.session.get(self.bakalariAPI.get_endpoint(Endpoint.LOGIN))
-            self.session.find_element_by_id("username").send_keys(self.bakalariAPI.username)
-            self.session.find_element_by_id("password").send_keys(self.bakalariAPI.password)
+            self.session.find_element_by_id("username").send_keys(
+                self.bakalariAPI.username
+            )
+            self.session.find_element_by_id("password").send_keys(
+                self.bakalariAPI.password
+            )
             self.session.find_element_by_id("loginButton").click()
-            output = self.session.current_url != self.bakalariAPI.get_endpoint(Endpoint.LOGIN)
+            output = self.session.current_url != self.bakalariAPI.get_endpoint(
+                Endpoint.LOGIN
+            )
             self.busy = False
             return output
 
@@ -240,13 +263,15 @@ class SeleniumSession(BakalariSession):
             response = requests.get(
                 self.bakalariAPI.get_endpoint(Endpoint.DASHBOARD),
                 cookies=utils.cookies_webdriver2requests(self.session),
-                allow_redirects=False
+                allow_redirects=False,
             )
             return not response.is_redirect
         else:
             self.busy = True
             self.session.get(self.bakalariAPI.get_endpoint(Endpoint.DASHBOARD))
-            output = self.session.current_url == self.bakalariAPI.get_endpoint(Endpoint.DASHBOARD)
+            output = self.session.current_url == self.bakalariAPI.get_endpoint(
+                Endpoint.DASHBOARD
+            )
             self.busy = False
             return output
 
@@ -308,16 +333,13 @@ class SessionManager:
             filter_busy:
                 Ignorovat zaneprázdněné sessiony při hledání? (Default: True)
         """
-        self.__lock.acquire()
-        try:
+        with self.__lock:
             if session_class not in self.sessions:
                 return None
             for session in self.sessions[session_class]:
                 if not (filter_busy and session.busy):
                     session.busy = set_busy
                     return cast(Session, session)
-        finally:
-            self.__lock.release()
         return None
 
     def get_session_or_create(
@@ -377,8 +399,7 @@ class SessionManager:
             session_class:
                 Typ sessionů, které se mají ukončit; Pokud je None, ukončí se všechny. (Default: None)
         """
-        self.__lock.acquire()
-        try:
+        with self.__lock:
             if session_class is None:
                 for sessions in self.sessions.values():
                     for session in sessions:
@@ -388,8 +409,6 @@ class SessionManager:
                 for session in self.sessions[session_class]:
                     session.kill(nice)
                 del self.sessions[session_class]
-        finally:
-            self.__lock.release()
 
     def kill_dead(self, session_class: Type[Session] | None = None):
         """Ukončí všechny sessiony, které jsou již odhlášeni z Bakalářů.
@@ -398,8 +417,7 @@ class SessionManager:
             session_class:
                 Typ sessionů, které se mají ukončit; Pokud je None, ukončí se všechny. (Default: None)
         """
-        self.__lock.acquire()
-        try:
+        with self.__lock:
             if session_class is None:
                 for sessions in self.sessions.values():
                     for session in sessions:
@@ -411,5 +429,3 @@ class SessionManager:
                     if not session.is_logged():
                         session.kill(False)
                         self.unregister_session(session)
-        finally:
-            self.__lock.release()

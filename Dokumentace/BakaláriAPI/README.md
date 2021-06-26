@@ -1,30 +1,75 @@
 # Úvod
-Tato složka by měla poskytnout dokumentaci ohledně BakalářiAPI - jak s ním pracovat, jak funguje, nějaké termíny, které se (nejen) interně používají, či případně jak si ho upravit.
+Tato složka by měla poskytnout dokumentaci ohledně `BakalářiAPI` - jak s ním pracovat, jak funguje, nějaké termíny, které se (nejen) interně používají, či případně jak si `BakalářiAPI` upravit.
 
-# Základ
-Celý `BakalářiAPI` se točí kolem třídy `bakalari.BakalariAPI`:
+Konkrétně tento soubor by měl být návod, jak zprovoznit základ `bakalariapi` modulu.
+
+# Inicializace
+Celý `BakalářiAPI` se točí kolem třídy `bakalariapi.BakalariAPI`. Na začátek bychom měli vytvořit instanci této třídy:
 ```py
-from bakalari import BakalariAPI
-api = BakalariAPI("https://bakalari.mojeskola.cz", "MojeSkvěléJméno", "MojeSuperTajnéHeslo")
-if api.is_server_running() and api.is_login_valid():
-    api.init()
-else:
-    raise Exception("Něco se pokazilo... Sadge")
+import bakalariapi
+api = bakalariapi.BakalariAPI("https://bakalari.mojeskola.cz", "ÚžasněSkvěléJméno", "SuperTajnéHeslo")
 ```
-A violá! Je hotovo! Počkat co? Takhle ti to nestačí? No tak já jdu napsat ještě další dokumentaci...
+Nyní máme připravenou instanci, přes/skrz kterou budeme dělat úplně vše.
 
-## Sessiony
-Pokud si věříš, tak nemusíš ani volat metody `.is_server_running()` a `.is_login_valid()`, ale reálně volání těchto metod tě prakticky nezpomalí jelikož je zde implementován session manager, který zužitkuje i již vytvořené sessiony. (Tady trochu lžu, jelikož `.is_server_running()` actually session manager nevyužívá.) (BTW `.init()` taky volat nemusíš, ale budou chybět některé informace, které budeš chtít a budeš dlouhou dobu hledat, proč vlastně nejsou :).)
+První věc, co nejspíš budeš chtít udělat, je ověření funkčnosti serveru a správnost přihlašovacích údajů:
+```py
+if not api.is_server_running():
+    raise Exception("Server není dostupný")
+elif not api.is_login_valid():
+    raise Exception("Nesprávné přihlašovací údaje")
+```
+Samozřejmě pokud jsi si jistý/jistá, že je vše správně, tak tyto metody volat nemusíš a ušetřit tím trochu času. Reálně toho času zase až tak moc neušetříš, jelikož sessiony se "recyklují" a použijí znova, aby se nemusel pro každou operaci vytvářet inicializovat nový session.
 
-Téměř všechny funkce potřebují udělat nějaký request na Bakaláře a je blbost, aby se pokaždé vytvořil nový session, kde by se pokaždé muselo autentizovat/přihlásit. V minulých verzích to bylo řešeno tak, že byl jeden interní session v instanci `BakalariAPI`, přes který se tyto požadavky vykonávaly. To mělo 2 hlavní nevýhody - první byla ta, že tento session byl udělán přes `requests` modul a v `BakalářiAPI` je potřeba mít i "Selenium session", který je nenahraditelný (to se vyřešilo tím, že bylo ponecháno na externím kódu, aby vždy passoval i validní Selenium session) a druhá byla ta, že je zde požadavek multitaskingu, a proto jeden session nestačí. Z toho důvodu vznikl `SessionManager`, který spravuje všechny sessiony (které se mu předají do správy) a vytváří nové "on-demand". Tím se řeší oba problémy, které zde byly při použití jednoho sessionu - Prnví je vyřešen tím, že je více druhů sessionů a při vyžádání sessionu od `SessionManager` se určuje i typ sessionu a druhý je řešen tak, že jich `SessionMannger` může mít pod správou prakticky nekonečno a navíc má Lock sekce, které zabraňují race condition problémům.
+Další (potencionálně chtěný) krok je `.init()` metoda. Ta získá některé informace o serveru (`bakalariapi.ServerInfo`) a uživatelovi (`bakalariapi.UserInfo`). Pokud tyto informace vědět nepotřebuješ, tak s `.init()` metodou nemusíš ztrácet čas.
+```py
+api.init() # Tato metoda nic nevrací ...
+print(api.user_info.hash) # ... ale ukládá data do UserInfo instance pod atributem "user_info" ...
+print(api.server_info.version) # ... a do ServerInfo instance pod atributem "server_info"
 
-Bylo zmíněno, že máme 2 typy sessionů - `RequestsSession`, který je implementován přes `requests` modul a `SeleniumSession`, který využívá Selenia (ještě se uvažuje nad tím, že bude v `SeleniumSession` interní `RequestsSession`, který bude využíván na tasky, kde není nutné přímo Selenium a tím by se určité věci urychlili.)
+if api.server_info.version != bakalariapi.LAST_SUPPORTED_VERSION:
+    print("Jiná verze Bakalářů, některé funkce nemusí fungovat správně")
+```
+Doporučuji ale `.init()` volat, jelikož pak lze ověřit reálnou verzi Bakalářů oproti verzi Bakalářů v `bakalariapi`. Ačkoli pravděpodobně vše bude fungovat, je stejně lepší někde v aplikaci oznámit, že se mohou vyskytnout určité deviace.
 
-Nyní tedy možná chápeš, proč tě volání metod `.is_server_running()` a `.is_login_valid()` ani moc nezpomal- teda... `.is_server_running()` tě zpomalí trochu, `.is_login_valid()` vůbec, jelikož se validní login ověřuje přihlášením a pokud je login správný, tak se při dalším požadavku již nemusí vytvářet a autentizovat session.
+# Získávání dat
+Nyní ta zábavná část - samotné získání dat. K tomu opět využijeme naší `BakalariAPI` instanci v proměnné `api`. `BakalariAPI` má hromadu metod, jejichž název začíná slovem "get":
+```py
+api.get_grades(...)
+api.get_homeworks(...)
+api.get_meeting(...)
+# ...
+```
+Tyto "get" metody nám slouží pro získávání dat. Všechny vrací array daných objektů (známky/úkoly/schůzky/...) a každá z těchto metod má jako první parametr "mode", typu `bakalariapi.GetMode` - jedná se o enum určující, jak se data získají - buď se získají v módu `GetMode.CACHED`, `GetMode.FRESH` nebo `GetMode.CACHED_OR_FRESH`. V módu `GetMode.CACHED` se načtou pouze data, která už jsou načtená (v looting instanci (viz dále)), takže se neprovede žádný dotaz na samotný server. Takže je možné, že data, která takto získáš, mohou být neaktuální. Naopak v módu `GetMode.FRESH` se data načtou čistě ze serveru, tudíž to nějaký čas zabere. A poslední mód, `GetMode.CACHED_OR_FRESH`, je kombinací obou dvou dohromady - nejdříve se zkusí načíst jako v módu `GetMode.CACHED` a pokud se žádná data nenačetla (teda počet vrácených objektů je 0), načtou se data v `GetMode.FRESH` módu. Takže když už teď víme, jak specifikovat výběr dat, můžeme nějaká získat:
+```py
+znamky = api.get_grades(bakalariapi.GetMode.CACHED_OR_FRESH)
+# ========== Nebo ==========
+from bakalariapi import GetMode # Pokud si chceme zkrátit zápis, tak můžeme importovat přímo GetMode ...
+znamky = api.get_grades(GetMode.CACHED_OR_FRESH) # ... a tím pádem můžeme vynechat "bakalariapi."
+```
+Metody mít i další parametry. Pokud metoda má i další parametry, tak pak tyto parametry je možné vkládat pouze jako keyword argumenty, tedy že se jednotlivé parametry musí specifikovat jménem:
+```py
+komens_zpravy = api.get_komens(bakalariapi.GetMode.CACHED_OR_FRESH, limit = 10)
+```
+Ovšem zde pozor - Pokud použiješ mód `GetMode.CACHED_OR_FRESH` a data jsou již v looting instanci, tak se nehledí na další parametry. Tzn., že předchozí kód může vrátit mnohem víc výsledků, než jen 10 (parametr `limit` omezuje počet výsledků), jelikož se v minulosti již data načetly. Stejně tak se může stát, že pokud zde bude kupříkladu parametr `from_date` filtrující výsledky dle data, tak se vrátí i nechtěné výsledky, které jsou starší, než uvedený datum.
 
-To byla trochu teorie o sessionech, nyní se pojďme podívat na samotné `BakalariAPI`...
+# Looting
+Nyní, když už jsme získali nějaká data, možná by se hodilo mít větší kontrolu nad již získanými výsledky. Pojďme se tedy podívat na třídu `bakalariapi.Looting`.
 
-## BakalariAPI
-Možná čekáš, že tady toho bude nejvíc, ale reálně já tady nemám co napsat, jelikož se to dá rychle shrnout a pravděpodobně se to bude ještě měnit.
+Tato třída obstarává uchování výsledků. Většina věcí se děje "pod pokličkou" (v `bakalariapi.BakalariAPI` instanci), ale může nastat situace, kdy chceme mít k již získáním přímý (nebo spíš "přímější") přístup. K looting instanci lze přistoupit skrze `.looting` atribut na `bakalariapi.BakalariAPI` instanci. Z lootingu můžeme dostat všechny objekty jednoho typu pomocí `.get()` metody:
+```py
+znamky = api.looting.get(bakalariapi.Grade)
+```
+Tenhle kód by vrátil array všech objektů typu `bakalariapi.Grade` (= objekty známek). Tohle prakticky dělá `bakalariapi.BakalariAPI` instance "v utajení", když se získávají data v `GetMode.CACHED` módu.
 
-Prakticky vše, co potřebuješ vědět, je to, že existují metody `.get_fresh_NĚCO()`, případně `.get_fresh_NĚCO_NĚJAK()`... No a tyhle metody dělají to co říkají - získají "čerstvá" data/"čerstvé" dané objekty ("čerstvé" znamená, že jsou nově získána i když třeba jsou v Lootingu). (Ano, ano, vím - špatná dokumentace, někdy to ještě musím přepsat LULW). Dále jsou zde již metody `.is_server_running()` a `.is_login_valid()`, které ověřují stav serveru a zda je login správný.
+Zajímavější ale je export a import dat. K tomu slouží metody `.export_JSON()` a `import_JSON()`, které nečekaně používají JSON formát. Zatím není možnost použít jiný formát, ale je možnost si udělat vlastní. Ale opět pozor - Import nahradí předchozí data, tudíž může dojít ke ztrátě dat.
+```py
+api.looting.import_JSON(
+    api.looting.export_JSON()
+)
+```
+Někdo by si mohl myslet, že tento kód prakticky nic neudělá. To by ale byl na omylu, jelikož toto může vést k neočekávanému chování:
+- Export si neumí moc dobře poradit s referencemi na ostatní objekty. Pokud některý z objektů, který se serializuje, obsahuje referenci na jiný objekt, ve výsledném exportovaném JSONu bude tento referencovaný objekt "samostatný". Tzn., že pokud více objektů referencuje jeden a ten samý objekt *X*, v exportovaných datech bude každých z těchto objektů vlastní objekt *X* (který bude vypadat jako původní objekt *X*, ale z exportovaných dat nelze poznat, že všechny objekty odkazovaly na ten samý).
+- Import logicky vytváří nové objekty (na základě dat, které importuje) a tyto nové objekty pak nahradí stará data v lootingu. Tudíž reference na objekty získané z lootingu před importem již nebudou ovlivňovat nové objekty (jedná o rozdílné objekty).
+
+# Závěr
+Tak to bylo takové "krátké" shrnutí jak použít `bakalariapi` modul. Nyní už stačí napsat nějaký kvalitní kód, který bude `bakalariapi` využívat.

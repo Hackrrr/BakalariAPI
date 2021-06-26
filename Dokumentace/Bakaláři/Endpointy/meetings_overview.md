@@ -12,7 +12,6 @@
 # Přehled
 Pro normálního uživatele přehled nadcházejících online schůzek. Pro nás zdroj IDček schůzek a to hned dvěma způsoby, které dávají rozdílné věci. Lze získat i něco víc, ale `BakalářiAPI` toho nevyužívá, jelikož data zde jsou nekompletní/neplatné a se znalostí IDčka schůzky lze získat kompletní informace skrze `meetings_info` enpoint.
 
-
 # Request 0
 Já začnu tím "druhým" (druhý znamená, že jsem na něj přišel jako později) protože u prvního máme něco navíc...
 Způsob č. 2 je využítí "API", které na to mají. Uděláme POST request na tento endpoint, který vypadá takto:
@@ -23,7 +22,7 @@ TimeWindow=FromTo&FilterByAuthor=AllInvitations&MeetingFrom=*DATUM_OD*&MeetingTo
 Parametry `TimeWindow` a `FilterByAuthor` přeskočím, protože nebyla nalezena cesta jak je užít nějak jinak - prostě je potřebujeme, abychom "aktivovali" tohle "API" a nevrátilo se nám HTML namísto JSONu (který chceme). `MeetingFrom` a `MeetingTo` jsou data na filtraci. Originální formát je `%Y-%m-%dT%H:%M:%S%z`, ale údaj se časového pásma se dá postrádat. Minimum je `0001-01-01T00:00:00` (když za rok dosadí "0000", tak se (podle dat z responsu) převede na `0001`) a maximum `9999-12-31T23:59:59`. 
  
 # Response 0
-Vrací se klasicky zabalený JSON:
+Vrací se [Success JSON](README.md#Success%20JSON):
 ```JSON
 {
    "success":true,

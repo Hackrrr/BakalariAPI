@@ -17,7 +17,7 @@ Pro normálního uživatele nedostupný endpoint. Stará se o změnu stavu "udě
 POST /HomeWorks/MarkAsFinished HTTP/1.1
 homeworkId=*ID_ÚKOLU*&completed=*STAV*&studentId=*ID_STUDENTA*
 ```
-Parametr `homeworkId`/`*ID_ÚKOLU*` je ID cíleného úkolu, paramter `completed`/`*STAV*` určuje, jaký stav se má nastavit (`true` je hotovo, `false` je nehotovo). Zvláštní je, že endpoint přijmá ID studenta (ID studenta je posíláno při normální interakci uživatele (viz "Výzkum")), avšak to vypadá, že se na něj nehledí.
+Parametr `homeworkId`/`*ID_ÚKOLU*` je ID cíleného úkolu, parametr `completed`/`*STAV*` určuje, jaký stav se má nastavit (`true` je hotovo, `false` je nehotovo). Zvláštní je, že endpoint přijímá ID studenta (ID studenta je posíláno při normální interakci uživatele (viz "Výzkum")), avšak to vypadá, že se na něj nehledí.
 
 # Response
 Vrací se klasicky zabalená data:
@@ -28,6 +28,7 @@ Zvláštností je, že požadavek bude **vždy** úspěšný podle vrácených d
 
 # Výzkum
 Ve verzi Bakalářů `1.35.1023.2` byla přidána možnost označit úkoly jako hotové a přes interaktivní checkbox byla nalezena JS funkce (kód funkce je ale vzat z verze `1.36.1207.1`):
+
 ```js
 function markAsDone(homeworkId, studentId, checkbox) {
     var url = appRoot + "HomeWorks/MarkAsFinished";

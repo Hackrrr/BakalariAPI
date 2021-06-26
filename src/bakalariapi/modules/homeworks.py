@@ -1,7 +1,6 @@
+"""Modul obsahující funkce týkající se úkolů."""
 import logging
 from datetime import datetime
-
-LOGGER = logging.getLogger("bakalariapi.modules.homeworks")
 
 from bs4 import BeautifulSoup
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
@@ -13,6 +12,8 @@ from ..bakalari import BakalariAPI, Endpoint, _register_parser
 from ..looting import GetterOutput, ResultSet
 from ..objects import Homework, HomeworkFile
 from ..sessions import RequestsSession, SeleniumSession
+
+LOGGER = logging.getLogger("bakalariapi.modules.homeworks")
 
 
 def getter_fast(bakalariAPI: BakalariAPI) -> GetterOutput[BeautifulSoup]:
@@ -104,7 +105,7 @@ def parser(getter_output: GetterOutput[BeautifulSoup]) -> ResultSet:
     """Parsuje získanou stránku s domácími úkoly a vrací parsované úkoly."""
     output = ResultSet()
     table = getter_output.data.find(id="grdukoly_DXMainTable")
-    if table == None:
+    if table is None:
         # Žádné úkoly (asi) nejsou
         return ResultSet()
     tmp = table.find("tbody")

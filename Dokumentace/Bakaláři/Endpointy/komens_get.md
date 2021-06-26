@@ -17,7 +17,7 @@ Posílá se POST request s ID zprávy a kontextem (viz dále) v JSONu:
 POST /next/komens.aspx/GetMessageData HTTP/1.1
 {'idmsg':'*ID_ZPRAVY*', 'context':'prijate'}
 ```
-`idmsg` je ID zprávy které chceme získat. `context` idikuje zda se jedná o přijatou (=> hodnota `prijate`) nebo poslanou/odeslanou zprávu (=> hodnota `odeslane`).
+`idmsg` je ID zprávy které chceme získat. `context` indikuje, zda se jedná o přijatou (=> hodnota `prijate`) nebo poslanou/odeslanou zprávu (=> hodnota `odeslane`).
 
 # Response
 Pro přijaté zprávy se vrací JSON:
@@ -31,7 +31,7 @@ Pro přijaté zprávy se vrací JSON:
    "Id":"GS15FAAAIE",
    "Jmeno":"ředitesltvi",
    "Kind":"OBECNA",
-   "MessageText":"Nějakej text zprávy se span \u003cspan\u003etagem\u003c/span\u003e.",
+   "MessageText":"Nějaký text zprávy se span \u003cspan\u003etagem\u003c/span\u003e.",
    "MohuEditovat":false,
    "MohuOdpovedet":false,
    "MohuPotlacit":true,
@@ -61,11 +61,11 @@ Popis klíčů:
 - `Cas` - Čas odeslání (/přijetí); Formát je `%d/%m/%Y %H:%M`
 - `Id` - ID zprávy
 - `Jmeno` - Jméno odesílatele; Pokud je odesílatel `ředitelství`, tak se název mění podle lokalizace (v anglické lokalizaci je to `headmastership`)
-- `Kind` - Podle názvu klíče bych tipnul "Typ zprávy", , ale zatím zde byla spatřena pouze jedna hodnota a to `OBECNA`
-- `MessageText` - Text zprávy; Některé znaky jsou escapované v unicode (zatím zjištěny tyto znaky: `<`, `>`, `&` a `"`)
+- `Kind` - Podle názvu klíče bych tipnul "Typ zprávy", ale zatím zde byla spatřena pouze jedna hodnota a to `OBECNA`
+- `MessageText` - Text zprávy; Některé znaky jsou escapované v Unicode (zatím zjištěny tyto znaky: `<`, `>`, `&` a `"`)
 - `MohuPotvrdit` - Pokud je hodnota `true`, tak vyžaduje potvrzení
-- `PersonChar` - eShrug - *Asi* indikuje typ odesílatele; Zatím spatřeny hodnoty `S` (zprávy, které odeslalo "ředitelství") a `U` (ostatní zprávy - od učitelů a žáků)
-- `RecipientsDontReadName` - Buď `null` a nebo array jmen lidí, kteří zprávu ještě nečetli/neviděli; Poznámky viz dále 
+- `PersonChar` - Nevím eShrug . *Asi* indikuje typ odesílatele; Zatím spatřeny hodnoty `S` (zprávy, které odeslalo "ředitelství") a `U` (ostatní zprávy - od učitelů a žáků)
+- `RecipientsDontReadName` - Buď `null` anebo array jmen lidí, kteří zprávu ještě nečetli/neviděli; Poznámky viz dále 
 - `RecipientsReadCount` - Buď `null` nebo string ve kterém je napsán počet potvrzených zpráv; Poznámky viz dále 
 - `RecipientsReadName` - Buď `null` nebo array jmen lidé, kteří již zprávu četli/viděli; Poznámky viz dále
 
@@ -92,10 +92,7 @@ Pokud zprávu nelze získat (špatné ID, špatný kontext, ...), tak se vrací 
 ```JSON
 {}
 ```
-Pokud při requestu dosadíme do parametru `context` invalidní hodnotu, tak způsobíme na serveru chybu a vrací se nám JSON, který nám říká, že nastala chyba (HTTP status kód je 500 ((Internal Server Error))):
-```JSON
-{"Message":"There was an error processing the request.","StackTrace":"","ExceptionType":""}
-```
+Pokud při requestu dosadíme do parametru `context` invalidní hodnotu, tak způsobíme na serveru chybu a vrací se nám [Error JSON](README.md#Error%20JSON).
 
 # Výzkum
-Enpoint získán odchytem při zobrazování (přijatých i odslaných) zpráv. Význam klíčů byl odvozen.
+Endpoint získán odchytem při zobrazování (přijatých i odeslaných) zpráv. Význam klíčů byl odvozen.

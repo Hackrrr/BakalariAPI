@@ -8,7 +8,7 @@ if api.is_server_running() and api.is_login_valid():
 else:
     raise Exception("Něco se pokazilo... Sadge")
 ```
-A violá! Je hotovo! Počkat co? Takhle ti to nestačí? Tak jdu napsat dokumentaci ještě pro jednotlivé funkce...
+A voilà! Je hotovo! Počkat co? Takhle ti to nestačí? Tak jdu napsat dokumentaci ještě pro jednotlivé funkce...
 
 # Metody
 Metody třídy `BakalariAPI`

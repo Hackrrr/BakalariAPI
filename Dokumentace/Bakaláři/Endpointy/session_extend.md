@@ -10,12 +10,12 @@
 | Potřeba Selenia?                  | Ne                         |
 
 # Přehled
-Normálně nedostupný. Produlužuje délku "životnosti" současné session na maximum. Funguje ale pouze v případě, že session je již za půlkou své životnosti.
+Normálně nedostupný. Prodlužuje délku "životnosti" současné session na maximum. Funguje ale pouze v případě, že session je již za půlkou své životnosti.
 
-*Pozn.: Je možný, že délka session je konfigurovatelná. To znamená, že je možné i to, že se session neprodlužuje na maximum ale na 900s (= 15 minut) a že životnost session musí být za/v 450s (= 7,5 minut), jelikož bylo zkoušeno jen na jednom serveru, kde délka session je 900s (= 15 minut).*
+*Pozn.: Je možné, že délka session je konfigurovatelná. To znamená, že je možné i to, že se session neprodlužuje na maximum ale na 900s (= 15 minut) a že životnost session musí být za/v 450s (= 7,5 minut), jelikož bylo zkoušeno pouze na jediném serveru, kde délka session je 900s (= 15 minut).*
 
 # Request
-Normálně (když se o to stará JS na klienstké straně) se posílá GET request s parametrem `_`, který má hodnotu UNIX timestampy uživatele; tento parametr je ale opět k ničemu a opět (znovu a zase) endpoint funguje i bez toho.
+Normálně (když se o to stará JS na klientské straně) se posílá GET request s parametrem `_`, který má hodnotu UNIX timestampy uživatele; tento parametr je ale opět k ničemu a opět (znovu a zase) endpoint funguje i bez toho.
 ```http
 GET /sessionextend HTTP/1.1
 ```
@@ -24,4 +24,4 @@ GET /sessionextend HTTP/1.1
 Nevrací se nic. HTTP status kód je 200 (Ok).
 
 # Výzkum
-Endpoint nalezen odchytem při kliknutí na tlačítko "ANO, JSEM TU" (ještě bych něco dodal, ale nechci být neslušný :) ). Čas nutný pro obnovu (tedy polovina maximální životnosti session) byl zjištěn přes script, který neustále dotazoval enpoint `session_info` (ze kterého i konroloval data) a enpoint `session_extend`. (Script je stále funkční (alepoň by měl být) jako "Test0" v `main.py` (lze ho spustit přes shell přes příkaz "test 0").)
+Endpoint nalezen odchytem při kliknutí na tlačítko "ANO, JSEM TU" (ještě bych něco dodal, ale nechci být neslušný :) ). Čas nutný pro obnovu (tedy polovina maximální životnosti session) byl zjištěn přes script, který neustále dotazoval endpointy [`session_info`](session_info.md) a `session_extend`. Tento script je integrován v shellu jako test 0 a tím pádem ho lze spustit v shellu přes příkaz `test 0`.

@@ -10,7 +10,7 @@
 | Potřeba Selenia?                  | Ne                         |
 
 # Přehled
-Odhlásí uživatele. Toť vše. Neposíláme žádný parametry, jen requestneme stránku. Actually je tohle login stránka (která login ověřuje přes reálnou login stránku), která vás ale předtím odhlásí a od skutečný login stránky se liší pouze v "detailech". Může vzniknout "vtipná" situace, když chcete navštívit tuto stránku, když nsjte nepřihlášeni - To má za následek to, že vás to přesměruje na reálnou login stránku (protože nejste přihlášení a tuto stránku můžete nsjšpíše navšívit jen jako přihlášený uživatel) s parametrem `returnUrl` jehož hodnota je `logout`, takže pokud se na reálně login stránce nyní přihlásíte, tak budete automaticky hned odlášeni LULW . BTW když už jsme u `returnUrl` parametru, tak ten tato stránka v GET requestu nepodporuje.
+Odhlásí uživatele. Toť vše. Neposíláme žádný parametry, jen uděláme request stránku. Actually je tohle login stránka (která login ověřuje přes reálnou login stránku), která vás ale předtím odhlásí a od skutečný login stránky se liší pouze v "detailech". Může vzniknout "vtipná" situace, když chcete navštívit tuto stránku, když nejste nepřihlášeni - To má za následek to, že vás to přesměruje na reálnou login stránku (protože nejste přihlášení a tuto stránku můžete nejspíše navštívit jen jako přihlášený uživatel) s parametrem `returnUrl` jehož hodnota je `logout`, takže pokud se na reálně login stránce nyní přihlásíte, tak budete automaticky hned odhlášeni LULW . BTW když už jsme u `returnUrl` parametru, tak ten tato stránka v GET requestu nepodporuje.
 
 # Request
 Posílá se GET request:
@@ -22,4 +22,4 @@ GET /logout HTTP/1.1
 Vrátí se HTML. Stejně vypadající jako reálná login stránka až na to, že má navíc text ve smyslu něco jako "byly jste odhlášeni".
 
 # Výzkum
-Link na tento enpoint se získal přes normální odhlášení.
+Link na tento endpoint se získal přes normální odhlášení.

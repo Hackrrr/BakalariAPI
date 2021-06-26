@@ -1,3 +1,4 @@
+"""Modul obsahující funkce týkající se online schůzek."""
 import json
 from datetime import datetime
 
@@ -52,7 +53,7 @@ def parser_meetings_overview_html(
     getter_output: GetterOutput[BeautifulSoup],
 ) -> ResultSet:
     output = ResultSet()
-    scritps = getter_output.data.head("script")
+    scritps = getter_output.data.head("script")  # type: ignore # Jelikož "head" může být None, tak Pylance naříká
     formated = ""
     for script in scritps:
         formated = script.prettify()
@@ -63,17 +64,17 @@ def parser_meetings_overview_html(
         line = line.strip()
         if line.startswith("var meetingsData = "):
             loot["Meetings"] = True
-            meetingsJSON = json.loads(line.strip()[len("var meetingsData = ") : -1])
-            for meeting in meetingsJSON:
+            meetings_json = json.loads(line.strip()[len("var meetingsData = ") : -1])
+            for meeting in meetings_json:
                 output.add_loot(
                     UnresolvedID(str(meeting["Id"]), Meeting)
                 )  # Actually je to int, ale všechny ostaní IDčka jsou string, takže se budeme tvářit že je string i tohle...
         elif line.startswith("model.Students = ko.mapping.fromJS("):
             loot["Students"] = True
-            studentsJSON = json.loads(
+            students_json = json.loads(
                 line.strip()[len("model.Students = ko.mapping.fromJS(") : -2]
             )
-            for student in studentsJSON:
+            for student in students_json:
                 output.add_loot(
                     Student(
                         student["Id"],
@@ -131,6 +132,6 @@ def parser_meetings_info(getter_output: GetterOutput[dict]) -> ResultSet:
 
 @_register_resolver(Meeting)
 def resolver(bakalariAPI: BakalariAPI, unresolved: UnresolvedID[Meeting]) -> Meeting:
-    return parser_meetings_info(
-        getter_meeting(bakalariAPI, unresolved.ID)
-    ).get(Meeting)[0]
+    return parser_meetings_info(getter_meeting(bakalariAPI, unresolved.ID)).get(
+        Meeting
+    )[0]

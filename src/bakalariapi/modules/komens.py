@@ -1,3 +1,4 @@
+"""Modul obsahující funkce týkající se Komens zpráv."""
 from datetime import datetime
 
 from bs4 import BeautifulSoup
@@ -47,7 +48,7 @@ def parser_main(getter_output: GetterOutput[BeautifulSoup]) -> ResultSet:
     output = ResultSet()
     komens_list = (
         getter_output.data.find(id="message_list_content")
-        .find("ul")
+        .find("ul")  # type: ignore # Jelikož může být None, tak Pylance naříká
         .find_all("li", recursive=False)
     )
     for komens in komens_list:

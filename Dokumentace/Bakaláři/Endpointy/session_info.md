@@ -10,16 +10,16 @@
 | Potřeba Selenia?                  | Ne                         |
 
 # Přehled
-Normálně nedostupný. Pomocí něj se získámá životnost a maximální životnost session. Pokud se jedná o běžného uživatele, tak se v určitém intervalu (jaký je se nezjistilo a je možný, že je dynamický) posílá request na tento endpoint. BTW tenhle endpoint může za vynikající funkci *"Jste tu? Jestli ano, zmáčkmi tlačítko"* a popř. (pokud už session vypršela) zobrazí dialog *"Jste dlouho neaktivní a proto jsme vás z DŮVODU BEZPEČNOSTI odhlásili. (+ tlačíko)"*.
+Normálně nedostupný. Pomocí něj se získává životnost a maximální životnost session. Pokud se jedná o běžného uživatele, tak se v určitém intervalu (jaký je se nezjistilo a je možný, že je dynamický) posílá request na tento endpoint. BTW tenhle endpoint může za vynikající funkci *"Jste tu? Jestli ano, zmáčkni tlačítko"* a popř. (pokud už session vypršela) zobrazí dialog *"Jste dlouho neaktivní a proto jsme vás z DŮVODU BEZPEČNOSTI odhlásili. (+ tlačítko)"*.
 
 # Request
-Normálně (když se o to stará JS na klienstké straně) se posílá GET request s parametrem `_`, který má hodnotu UNIX timestampy uživatele; tento parametr je ale opět k ničemu a opět (znovu a zase) endpoint funguje i bez toho.
+Normálně (když se o to stará JS na klientské straně) se posílá GET request s parametrem `_`, který má hodnotu UNIX timestampy uživatele; tento parametr je ale opět k ničemu a opět (znovu a zase) endpoint funguje i bez toho.
 ```http
 GET /sessioninfo HTTP/1.1
 ``` 
 
 # Response
-Vrací se klasicky zabalený JSON:
+Vrací se [Success JSON](README.md#Success%20JSON):
 ```JSON
 {
    "success":true,
@@ -37,4 +37,4 @@ Popis klíčů:
 Pokud není uživatel přihlášen, `remainingTime` i `sessionDuration` mají hodnotu `0.0` (`success` má pořád hodnotu `true` a `error` je prázdný).
 
 # Výzkum
-Endpoint nalezn při odchytu provozu při "neaktivitě".
+Endpoint nalezen při odchytu provozu při "neaktivitě".

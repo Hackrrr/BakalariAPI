@@ -1,12 +1,11 @@
+"""Modul obsahující věci kolem Selenia."""
+
 from enum import Enum
 
 from selenium import webdriver
 from selenium.webdriver.remote.webdriver import WebDriver
 
-__all__ = [
-    "Browser",
-    "SeleniumHandler"
-]
+__all__ = ["Browser", "SeleniumHandler"]
 
 
 class Browser(Enum):
@@ -19,6 +18,7 @@ class Browser(Enum):
     OPERA = 4
     IE = 5
 
+
 class SeleniumHandler:
     """Třída obsahujcí nastavení pro Selenium."""
 
@@ -28,6 +28,7 @@ class SeleniumHandler:
         self.params: dict = params
 
     def open(self, try_silent: bool = True) -> WebDriver:
+        """Spustí a vrátí WebDriver instanci"""
         # try_silent = False # DEBUG LINE ONLY - SHOULD BE COMMENTED
         path = (
             {"executable_path": self.executable_path}

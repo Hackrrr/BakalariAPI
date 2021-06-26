@@ -1,5 +1,4 @@
-"""Modul obsahující většinu objektů z BakalariAPI.
-"""
+"""Modul obsahující většinu objektů z BakalariAPI."""
 
 from __future__ import annotations
 
@@ -13,7 +12,6 @@ from .bakalari import BakalariAPI, Endpoint
 from .sessions import RequestsSession
 from .utils import (
     T0,
-    Empty,
     Serializable,
     bs_get_text,
     cs_timedelta,
@@ -111,11 +109,9 @@ class BakalariObject(Serializable, ABC):
         # Postaveno na základě tohoto https://stackoverflow.com/a/2169191
 
         obj = super().__new__(cls)
-        #print(type(obj))
-        #print(obj)
-        
+
         for k, v in data.items():
-            #if hasattr(obj, k): # Nebude fungovat, jelikož novoláme __init__, nýbrž pouze __new__ a tím pádem objekt nemá prakticky žádné atributy
+            # if hasattr(obj, k): # Nebude fungovat, jelikož novoláme __init__, nýbrž pouze __new__ a tím pádem objekt nemá prakticky žádné atributy
             setattr(obj, k, v)
         return obj
 
@@ -312,15 +308,15 @@ class MeetingProvider(Serializable):
     BY_ID: dict[int, MeetingProvider] = {}
     BY_KEY: dict[str, MeetingProvider] = {}
 
-    def __init__(self, id: int, key: str, label: str):
-        self.id: int = id
+    def __init__(self, ID: int, key: str, label: str):
+        self.ID: int = ID
         self.key: str = key
         self.label: str = label
-        self.BY_ID[self.id] = self
+        self.BY_ID[self.ID] = self
         self.BY_KEY[self.key] = self
 
     def serialize(self) -> int:
-        return self.id
+        return self.ID
 
     @classmethod
     def deserialize(cls, data: int) -> MeetingProvider:
@@ -343,7 +339,7 @@ class Meeting(BakalariObject):
         content: str,
         start_time: datetime,
         end_time: datetime,
-        joinURL: str,
+        join_url: str,
         participants: list[tuple[str, str]],
         participants_read_info: list[tuple[str, datetime]],
         provider: MeetingProvider,
@@ -354,7 +350,7 @@ class Meeting(BakalariObject):
         self.content: str = content
         self.start_time: datetime = start_time
         self.end_time: datetime = end_time
-        self.joinURL: str = joinURL
+        self.join_url: str = join_url
         self.participants: list[tuple[str, str]] = participants  # ID, (Celé) Jméno
         self.participants_read_info: list[
             tuple[str, datetime]
@@ -377,7 +373,7 @@ class Meeting(BakalariObject):
             f"Začátek: {self.start_time.strftime('%H:%M, %d. %m. %Y')}{(' (' + cs_timedelta(delta, 'dhm') + ' do začátku)') if delta > timedelta(0) else (' (začíná nyní)' if delta == timedelta(0) else '')}\n"
             f"Konec:   {self.end_time.strftime('%H:%M, %d. %m. %Y')}\n"
             f"Poskytovatel schůzky: {self.provider.label}\n"
-            f"URL na připojení: {self.joinURL}\n"
+            f"URL na připojení: {self.join_url}\n"
             f"Název: {self.name.strip()}\n"
             "\n"
             f"{bs_get_text(BeautifulSoup(self.content, 'html.parser'))}"

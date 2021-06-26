@@ -1,6 +1,4 @@
-"""
-Jednoduché (i složitější) utility sloužící ke správnému fungování BakalářiAPI.
-"""
+"""Jednoduché (i složitější) utility sloužící ke správnému fungování BakalářiAPI."""
 
 from __future__ import annotations
 
@@ -18,7 +16,7 @@ T2 = TypeVar("T2")
 
 
 def first2upper(string: str) -> str:
-    """První znak ve stringu dá do Uppercase"""
+    """První znak ve stringu dá do Uppercase."""
     return string[0].upper() + string[1:]
 
 
@@ -167,6 +165,7 @@ def cs_timedelta(
 
 
 def human_join(lst: list, connector: str = ", ", last_connector: str = " a ") -> str:
+    """Lidsky spojí list a vrátí výsledek jako string."""
     l = len(lst)
     if l == 0:
         return ""
@@ -176,24 +175,27 @@ def human_join(lst: list, connector: str = ", ", last_connector: str = " a ") ->
 
 
 def line_modifier(text: str, prefix: str = "", suffix: str = "") -> str:
+    """Modifikuje string řádku po řádce."""
     lines = [f"{prefix}{line}{suffix}" for line in line_iterator(text)]
     return "\n".join(lines)
 
 
-class Empty(object):
-    pass
-
 @runtime_checkable
 class Serializable(Protocol[T0, T1]):
+    """Protokol, který implementují třídy, které jsou schopné serializace."""
+
     def serialize(self: T1) -> T0:
+        """Serializuje objekt tak, aby ho mohla následně metoda `.deserialize()` deserializovat."""
         raise NotImplementedError()
 
     @classmethod
     def deserialize(cls, data: T0) -> T1:
+        """Deserializuje data, které vyprodukovala `.serialize()` metoda."""
         raise NotImplementedError()
 
 
 def resolve_string(string: str) -> Any:
+    """Převede 'název' na objekt."""
     splitted = string.split(".")
     if splitted[0] not in sys.modules:
         try:
@@ -211,14 +213,17 @@ def resolve_string(string: str) -> Any:
 
 
 def get_full_type_name(t: type) -> str:
+    """Vrátí celý název typu."""
     return f"{t.__module__}.{t.__name__}"
 
 
 def cookies_webdriver2requests(webdriver: WebDriver) -> dict[str, str]:
+    """Převede Selenium cookies do formátu cookies pro `requests` modul."""
     return {entry["name"]: entry["value"] for entry in webdriver.get_cookies()}
 
 
 def cookies_requests2webdriver(cookies: RequestsCookieJar) -> list[dict[str, Any]]:
+    """Převede `RequestsCookieJar` do formátu cookies pro Selenium."""
     return [
         {
             "name": cookie.name,
@@ -226,7 +231,7 @@ def cookies_requests2webdriver(cookies: RequestsCookieJar) -> list[dict[str, Any
             "path": cookie.path,
             "domain": cookie.domain,
             "secure": cookie.secure,
-            #"expiry": cookie.expires # Protože nevím, jak si selenium poradí s případnou hodnotou None
+            # "expiry": cookie.expires # Protože nevím, jak si selenium poradí s případnou hodnotou None
         }
         for cookie in cookies
     ]

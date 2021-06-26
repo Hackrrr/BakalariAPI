@@ -10,7 +10,7 @@
 | Potřeba Selenia?                  | Ne                         |
 
 # Přehled
-Pro normální uživatele nedostupný. Slouží ke stahování souborů s určitím ID. Posílá se GET request s parametrem `f` jehož hodnota je ID souboru, kteerý chceme stáhnout.
+Pro normální uživatele nedostupný. Slouží ke stahování souborů s určitým ID. Posílá se GET request s parametrem `f` jehož hodnota je ID souboru, který chceme stáhnout.
 
 # Request
 ```http

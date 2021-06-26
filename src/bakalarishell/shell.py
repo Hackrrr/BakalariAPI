@@ -5,6 +5,8 @@ V nejbližší době se bude pořádně refraktorovat (tzn. že se celý modul p
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import os
 import re
 import sys
@@ -139,7 +141,7 @@ class ShellCompleter(Completer):
                             CommandEntryPriority.BASE: "",
                             CommandEntryPriority.ALIAS: "bg:ansiyellow",
                             CommandEntryPriority.USER_ALIAS: "bg:ansiyellow",
-                        }[priority]
+                        }[priority],
                     )
 
 
@@ -206,6 +208,7 @@ class Shell:
         end_on_ctrlc: bool = True,
         raise_on_ctrlc: bool = False,
         command_exception_traceback: bool = True,
+        command_exception_traceback_locals: bool = False,
         command_exception_reraise: bool = True,
         history: bool = True,
         history_suggestions: bool = True,
@@ -228,6 +231,9 @@ class Shell:
         self.END_ON_CTRL_C: bool = end_on_ctrlc
         self.RAISE_ON_CTRL_C: bool = raise_on_ctrlc
         self.COMMAND_EXCEPTION_TRACEBACK: bool = command_exception_traceback
+        self.COMMAND_EXCEPTION_TRACEBACK_LOCALS: bool = (
+            command_exception_traceback_locals
+        )
         self.COMMAND_EXCEPTION_RERAISE: bool = command_exception_reraise
 
         if completely_disable_bell:
@@ -378,11 +384,13 @@ class Shell:
         self.commands[entry.priority][entry.name] = entry
         if self._running:
             self._sort_commands(entry.priority)
-    
+
     def _sort_commands(self, priority: CommandEntryPriority | None = None):
         # Pravděpodobně moc efektivní není, ale alespoň by to mělo být seřazený
-        for priority in (self.commands.keys() if priority is None else [priority]):
-            self.commands[priority] = {k: v for k, v in sorted(self.commands[priority].items())}
+        for priority in self.commands.keys() if priority is None else [priority]:
+            self.commands[priority] = {
+                k: v for k, v in sorted(self.commands[priority].items())
+            }
 
     def proc_string(self, inpt: str):
 
@@ -587,7 +595,12 @@ class Shell:
                     except Exception as e:
                         if self.COMMAND_EXCEPTION_TRACEBACK:
                             c = console.Console()
-                            c.print(traceback.Traceback())
+                            t = traceback.Traceback(
+                                show_locals=self.COMMAND_EXCEPTION_TRACEBACK_LOCALS
+                            )
+                            t.trace.stacks[0].frames = t.trace.stacks[0].frames[3:]
+                            c.print(t)
+
                         if self.COMMAND_EXCEPTION_RERAISE:
                             raise e
         except KeyboardInterrupt as keyboard_interrupt:
@@ -614,18 +627,19 @@ class Shell:
         return parsed
 
     def __python_exec(self, inpt: str):
-        python_exec(inpt, self.PYTHON_EXEC_GLOBALS, self.PYTHON_EXEC_LOCALS)
+        print(python_exec(inpt, self.PYTHON_EXEC_GLOBALS, self.PYTHON_EXEC_LOCALS))
 
 
-def python_exec(string: str, globals_={}, locals_={}):
+def python_exec(string: str, globals_={}, locals_={}) -> str:
     try:
-        return exec(string, globals_, locals_)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            exec(string, globals_, locals_)
+        return out.getvalue()
     except:
         c = console.Console()
         t = traceback.Traceback()
-        # trace: traceback.Trace = t.trace
-        # top = trace.stacks[0]
-        # top.frames = []
-        t.trace.stacks[0].frames = [] # IDK co jsem udělal, ale (asi) je to to co chci
+        t.trace.stacks[0].frames = []  # IDK co jsem udělal, ale (asi) je to to co chci
         # Ok, asi to jsem tomu sebral funkcionalitu, ale alespoň jsou teď barvičky peepoHappy
         c.print(t)
+    return ""

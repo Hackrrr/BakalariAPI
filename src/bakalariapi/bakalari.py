@@ -51,14 +51,12 @@ class Endpoint:
 
 Endpoint._ENDPOINT_DICT = {
     name: path for name, path in Endpoint.__dict__.items() if not name.startswith("_")
-}  # pylint: disable=protected-access
+}
 
 
 _parsers: dict[
     str, dict[Any, list[Callable[[looting.GetterOutput], looting.ResultSet]]]
-] = {
-    x: {} for x in Endpoint._ENDPOINT_DICT.values()
-}  # pylint: disable=protected-access
+] = {x: {} for x in Endpoint._ENDPOINT_DICT.values()}
 _resolvers: dict[
     Type[BakalariObject],
     list[Callable[[BakalariAPI, UnresolvedID], BakalariObject | None]],
@@ -78,7 +76,7 @@ def _register_parser(endpoint: str, type_: Type[looting.GetterOutputTypeVar]):
         type_:
             Typ generické třídy GetterOutput, který funkce přijímá.
     """
-    LOGGER.debug(f"New parser registred for endpoint '{endpoint}' (Type: {type_})")
+    LOGGER.debug("New parser registred for endpoint '%s' (Type: %s)", endpoint, type_)
 
     def decorator(
         func: Callable[
@@ -102,8 +100,7 @@ def _register_resolver(type_: Type[BakalariObj]):
         type_:
             Typ/Třída, pro kterou je tato funkce resolverem.
     """
-
-    LOGGER.debug(f"New resolver registred for type {type_}")
+    LOGGER.debug("New resolver registred for type %s", type_)
 
     def decorator(
         func: Callable[[BakalariAPI, UnresolvedID[BakalariObj]], BakalariObj]
@@ -174,8 +171,7 @@ def _resolve(
                 except exceptions.BakalariQuerrySuccessError as e:
                     if silence_querry_errors:
                         continue
-                    else:
-                        raise e
+                    raise e
                 if tmp is not None:
                     output.add_loot(tmp)
                     resolved = True
@@ -188,6 +184,13 @@ def _resolve(
 
 
 class GetMode(Enum):
+    """Enum určující mód při získávání dat.
+
+    CACHED - Data se získají pouze z `Looting` instance
+    FRESH - Data se získají pouze ze serveru
+    CACHED_OR_FRESH - Nejprve se zkusí načíst data z `Looting` instance, pokud zde nejsou, načtou se data ze serveru
+    """
+
     CACHED = 0
     FRESH = 1
     CACHED_OR_FRESH = 2
@@ -223,7 +226,9 @@ class BakalariAPI:
         self.username: str = username
         self.password: str = password
         self.selenium_handler: seleniumhandler.SeleniumHandler | None = seleniumHandler
-        self.session_manager: sessions.SessionManager = sessions.SessionManager(self, True)
+        self.session_manager: sessions.SessionManager = sessions.SessionManager(
+            self, True
+        )
         self.looting: looting.Looting = looting.Looting()
         self.user_info: UserInfo = UserInfo()
         self.server_info: ServerInfo = ServerInfo(url)
@@ -290,15 +295,18 @@ class BakalariAPI:
         """
         session = self.session_manager.get_session_or_create(sessions.RequestsSession)
 
-        getter_output = looting.GetterOutput(Endpoint.USER_INFO, BeautifulSoup(
-            session.get(self.get_endpoint(Endpoint.USER_INFO)).content,
-            "html.parser",
-        ))
+        getter_output = looting.GetterOutput(
+            Endpoint.USER_INFO,
+            BeautifulSoup(
+                session.get(self.get_endpoint(Endpoint.USER_INFO)).content,
+                "html.parser",
+            ),
+        )
         session.busy = False
         self._parse(getter_output)
 
         # Možná by se mohl registrovat parser
-        data = json.loads(getter_output.data.head["data-pageinfo"])
+        data = json.loads(getter_output.data.head["data-pageinfo"])  # type: ignore # Jelikož "head" může být None, tak Pylance naříká
         self.user_info.type = data["userType"]
         self.user_info.hash = data["userHash"]
         self.server_info.version = data["applicationVersion"]
@@ -343,16 +351,13 @@ class BakalariAPI:
         """
 
     def get_grades(self, mode: GetMode, **kwargs) -> list[Grade]:
-        kwargs = {
-            "from_date": None,
-            **kwargs
-        }
+        kwargs = {"from_date": None, **kwargs}
         if mode == GetMode.CACHED:
             return self.looting.get(Grade)
         elif mode == GetMode.FRESH:
-            return self._parse(
-                modules.grades.getter(self, kwargs["from_date"])
-            ).get(Grade)
+            return self._parse(modules.grades.getter(self, kwargs["from_date"])).get(
+                Grade
+            )
         elif mode == GetMode.CACHED_OR_FRESH:
             output = self.get_grades(GetMode.CACHED)
             return (
@@ -506,16 +511,14 @@ class BakalariAPI:
             "only_first_page": False,
             "first_loading_timeout": 5,
             "second_loading_timeout": 10,
-            **kwargs
+            **kwargs,
         }
 
         if mode == GetMode.CACHED:
             return self.looting.get(Homework)
         elif mode == GetMode.FRESH:
             if kwargs["fast_mode"]:
-                return self._parse(modules.homeworks.getter_fast(self)).get(
-                    Homework
-                )
+                return self._parse(modules.homeworks.getter_fast(self)).get(Homework)
             else:
                 output = modules.homeworks.get_slow(
                     self,
@@ -618,9 +621,9 @@ class BakalariAPI:
                 ).get(Meeting)
             else:
                 return self._resolve(
-                    self._parse(
-                        modules.meetings.getter_future_meetings_ids(self)
-                    ).get(UnresolvedID)
+                    self._parse(modules.meetings.getter_future_meetings_ids(self)).get(
+                        UnresolvedID
+                    )
                 ).get(Meeting)
         elif mode == GetMode.CACHED_OR_FRESH:
             output = self.get_meetings(GetMode.CACHED)
@@ -673,9 +676,9 @@ class BakalariAPI:
         if mode == GetMode.CACHED:
             return self.looting.get(Student)
         elif mode == GetMode.FRESH:
-            return self._parse(
-                modules.meetings.getter_future_meetings_ids(self)
-            ).get(Student)
+            return self._parse(modules.meetings.getter_future_meetings_ids(self)).get(
+                Student
+            )
         elif mode == GetMode.CACHED_OR_FRESH:
             output = self.get_students(GetMode.CACHED)
             return (
@@ -696,11 +699,11 @@ class BakalariAPI:
     @overload
     def get_komens(
         self,
-        mode: GetMode.FRESH, # type: ignore
+        mode: GetMode.FRESH,  # type: ignore
         *,
         from_date: datetime | None = None,
         to_date: datetime | None = None,
-        limit: int | None = None,    
+        limit: int | None = None,
     ) -> list[Komens]:
         """Nově načte a vrátí komens zprávy.
 
@@ -727,11 +730,11 @@ class BakalariAPI:
     @overload
     def get_komens(
         self,
-        mode: GetMode.CACHED_OR_FRESH, # type: ignore
+        mode: GetMode.CACHED_OR_FRESH,  # type: ignore
         *,
         from_date: datetime | None = None,
         to_date: datetime | None = None,
-        limit: int | None = None,   
+        limit: int | None = None,
     ) -> list[Komens]:
         """Načte a vrátí komens zprávy z vlastní looting instance. Pokud v looting instanci nejsou přítomny žádné komens zprávy, pokusí se načíst nové.
 
@@ -756,27 +759,22 @@ class BakalariAPI:
         """
 
     def get_komens(self, mode: GetMode, **kwargs) -> list[Komens]:
-        kwargs = {
-            "from_date": None,
-            "to_date": None,
-            "limit": None,
-            **kwargs
-        }
+        kwargs = {"from_date": None, "to_date": None, "limit": None, **kwargs}
 
         if mode == GetMode.CACHED:
             return self.looting.get(Komens)
         elif mode == GetMode.FRESH:
             return self._resolve(
                 self._parse(
-                    modules.komens.getter_komens_ids(self, kwargs["from_date"], kwargs["to_date"])
-                ).get(UnresolvedID)[:kwargs["limit"]]
+                    modules.komens.getter_komens_ids(
+                        self, kwargs["from_date"], kwargs["to_date"]
+                    )
+                ).get(UnresolvedID)[: kwargs["limit"]]
             ).get(Komens)
         elif mode == GetMode.CACHED_OR_FRESH:
             output = self.get_komens(GetMode.CACHED)
             return (
-                self.get_komens(GetMode.FRESH, **kwargs)
-                if len(output) == 0
-                else output
+                self.get_komens(GetMode.FRESH, **kwargs) if len(output) == 0 else output
             )
 
     def get_all_komens(self) -> list[Komens]:
@@ -791,9 +789,9 @@ class BakalariAPI:
         return self.get_komens(
             GetMode.FRESH,
             from_date=datetime(1953, 1, 1),
-            to_date=datetime.today() + timedelta(1)
+            to_date=datetime.today() + timedelta(1),
         )
-    
+
     def _parse(
         self, getter_output: looting.GetterOutput[looting.GetterOutputTypeVar]
     ) -> looting.ResultSet:

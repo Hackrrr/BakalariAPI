@@ -10,7 +10,7 @@
 | Potřeba Selenia?                  | Ne                         |
 
 # Přehled
-Pro normálního uživatele rychlý přehled. Pro nás nic zajímavého. Teoreticky by daly nějak exrahovat a využít data z panelů. `BakalariAPI` tuto stránku využívá k ověření správného přihlášení - Směřuje sem totiž redirect z úspěšného přihlášení (pokud se nespecifikuje jinak; viz endpoint `login`). Také sem přesměrovává i request/response na root (tzn. "/") pokud jsme přihlášeni.
+Pro normálního uživatele rychlý přehled, pro nás nic zajímavého. Teoreticky by se dala nějak extrahovat a využít data z panelů. Směřuje sem totiž přesměrování z úspěšného přihlášení (pokud se nespecifikuje jinak; viz [endpoint `login`](login.md)). Také sem přesměrovává i request/response na root (tzn. "/") pokud jsme přihlášeni.
 
 # Request
 ```http

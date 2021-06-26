@@ -7,6 +7,7 @@ import io
 # from asyncio import get_event_loop_policy # Ok, teď absolutně nemám tušení co dělám (jakože vůbec), ale doufám, že to takhle zprovozním
 import logging
 import logging.config
+import sys
 import threading
 import time
 import traceback
@@ -27,7 +28,9 @@ from prompt_toolkit.shortcuts.progress_bar import ProgressBar, ProgressBarCounte
 from prompt_toolkit.input import create_input
 from prompt_toolkit.keys import Keys
 
-from rich import inspect # Import kvůli tomu, aby jsme mohli volat rovnou 'inspect()' v python execu ze shellu
+from rich import (
+    inspect,
+)  # Import kvůli tomu, aby jsme mohli volat rovnou 'inspect()' v python execu ze shellu
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.syntax import Syntax
@@ -257,7 +260,7 @@ def Init():
         ):
             Command_Import()
         elif dialog_ano_ne("Chce tedy ukončit aplikaci?", True):
-            exit(1)
+            sys.exit(1)
         else:
             print(
                 "Nechávám aplikaci běžet, avšak většina věcí pravděpodobně fungovat nebude"
@@ -268,7 +271,7 @@ def Init():
     if not api.is_login_valid():
         print("Přihlašovací údaje jsou neplatné!")
         if dialog_ano_ne("Chce tedy ukončit aplikaci?", True):
-            exit(1)
+            sys.exit(1)
         else:
             print(
                 "Nechávám aplikaci běžet, avšak většina věcí pravděpodobně fungovat nebude"
@@ -283,13 +286,16 @@ def Init():
 
 def ServerInfo():
     print(
-        f"Typ uživatele: {api.user_info.type}\n"
-        f"Uživatelký hash: {api.user_info.hash}\n"
-        f"Verze Bakalářů: {api.server_info.version}\n"
-        f"Datum verze Bakalářů: {api.server_info.version_date.strftime('%d. %m. %Y')}\n"
-        f"Evidenční číslo verze Bakalářů: {api.server_info.evid_number}"
+        f"Typ uživatele: {'Není k dispozici' if api.user_info.type == '' else api.user_info.type}\n"
+        f"Uživatelký hash: {'Není k dispozici' if api.user_info.hash == '' else api.user_info.hash}\n"
+        f"Verze Bakalářů: {'Není k dispozici' if api.server_info.version == '' else api.server_info.version}\n"
+        f"Datum verze Bakalářů: {'Není k dispozici' if api.server_info.version_date is None else api.server_info.version_date.strftime('%d. %m. %Y')}\n"
+        f"Evidenční číslo verze Bakalářů: {'Není k dispozici' if api.server_info.evid_number is None else api.server_info.evid_number}"
     )
-    if api.server_info.version != bakalariapi.LAST_SUPPORTED_VERSION:
+    if (
+        api.server_info.version is not None
+        and api.server_info.version != bakalariapi.LAST_SUPPORTED_VERSION
+    ):
         print("*** Jiná verze Bakalářů! Všechny funkce nemusejí fungovat správně! ***")
 
 
@@ -486,7 +492,7 @@ def Command_Export():
         return
     print("Generace JSON dat...")
     f: io.TextIOWrapper = parsed_args.file
-    f.write(api.looting.export_JSON())
+    f.write(api.looting.export_json())
     f.truncate()  # Odstraníme data, která jsou případně po JSONu, co jsme teď napsali (třeba pozůstatek po předchozím JSONu, pokud byl delší, jak náš současný)
     f.seek(0, 0)
 
@@ -498,7 +504,7 @@ def Command_Import():
         print("Nelze importovat data, jelikož není specifikován soubor")
         return
     f: io.TextIOWrapper = parsed_args.file
-    api.looting.import_JSON(f.read())
+    api.looting.import_json(f.read())
     f.seek(0, 0)
     print(f"Data ze souboru {f.name} byla načtena")
 
@@ -508,21 +514,21 @@ def Command_Import():
 ##################################################
 
 
-def RunTest(id: int):
+def RunTest(ID: int):
     m = __import__(__name__)
-    t = f"Test{id}"
+    t = f"Test{ID}"
     if hasattr(m, t):
-        print(f"Zahajuji test {id}")
+        print(f"Zahajuji test {ID}")
         try:
             o = getattr(m, t)()
             print(
-                f"Test {id} skončil" + ("" if o is None else f"; Výsledek testu je {o}")
+                f"Test {ID} skončil" + ("" if o is None else f"; Výsledek testu je {o}")
             )
         except:
             print("Test skončil neúspěchem:")
             traceback.print_exc()
     else:
-        print(f"Test {id} nenalezen")
+        print(f"Test {ID} nenalezen")
 
 
 def Test0():
@@ -574,9 +580,9 @@ def Test1():
     # "Kopírování"
     print("Vytváření kopie skrz JSON export/import...")
     new = bakalariapi.looting.Looting()
-    json = api.looting.export_JSON()
+    json = api.looting.export_json()
     print(json)
-    new.import_JSON(json)
+    new.import_json(json)
     print("Kopie vytvořena")
 
     # Porovnávání
@@ -790,14 +796,18 @@ def main():
             handlers=[RichHandler()],
         )
         logging.info(
-            f"Logging zapnut na levelu {parsed_args.verbose} ({logging.getLevelName(logging.root.level)})"
+            "Logging zapnut na levelu %s (%s)",
+            parsed_args.verbose,
+            logging.getLevelName(logging.root.level),
         )
         if parsed_args.verbose < 4:
-            for logger in [logging.getLogger(name) for name in logging.root.manager.loggerDict]:
+            for logger in [
+                logging.getLogger(name) for name in logging.root.manager.loggerDict
+            ]:
                 if logger.name.startswith("bakalariapi"):
                     continue
-                logger.propagate = False  # type: ignore # Protože ve values může být (podle IDE) PlaceHolder instance (reálně to tak není, protože voláme getLogger pro každý logger)
-            #logging.getLogger("bakalariapi").propagate = True
+                logger.propagate = False
+            # logging.getLogger("bakalariapi").propagate = True
 
     seleniumSettings: bakalariapi.SeleniumHandler | None = None
     if parsed_args.browser != "":
@@ -959,6 +969,8 @@ def prepare_shell():
         python_exec_globals=globals(),
         python_exec_locals=locals(),
         predefined_commands=predefined_commands,
+        command_exception_traceback=True,
+        command_exception_traceback_locals=True,
         command_exception_reraise=False,
         raise_on_ctrlc=True,
         end_on_ctrlc=True,

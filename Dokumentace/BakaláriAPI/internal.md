@@ -5,7 +5,7 @@ Zde napíšu něco o tom, jak `BakalářiAPI` funguje interně. Pokud nechcete p
 ## BakalariSession
 Sessiony jsou objekty, přes které děláme requesty na samotné Bakaláře. Sessiony jsou instance tříd derivovaných z `bakalariapi.bakalari.BakalariSession`. Celkově jsou (zatím) 2 třídy sessionů - `RequestsSession` a `SeleniumSession`. Tyto druhy sessionů dělají takový "wrapper" daných modulů - tedy `RequestsSession` používá `requests` modul a `SeleniumSession` používá `selenium`.
 
-Proč máme víc druhů sessionů? Protože na určité věci prostě nestačí klasický `requests` modul (vysvětlení viz [zde](/Dokumentace/readme.md#pro%C4%8D-tohle-pot%C5%99ebujeme)) a musíme použít `selenium`. A proč se tedy nepoužije jen `selenium`? Protože `selenium` je extémně pomalý (zvětší části kvůli tomu, že Bakaláři jsou pomalý).
+Proč máme víc druhů sessionů? Protože na určité věci prostě nestačí klasický `requests` modul (vysvětlení viz [zde](../README.md#pro%C4%8D-tohle-pot%C5%99ebujeme)) a musíme použít `selenium`. A proč se tedy nepoužije jen `selenium`? Protože `selenium` je extémně pomalý (zvětší části kvůli tomu, že Bakaláři jsou pomalý).
 
 Asi nejdůležitější věc, co je u sessionů, je `busy` "flag" (vlastnost). `busy` indikuje, zda je session zrovna volný či ho nějaká část kódu někde zrovna používá. Nikdy by nikdo neměl manuálně nastavovat `busy` na `True` - o to by se měl starat `SessionManager` (viz dále). Pokud ale i přesto z nějakého důvodu je potřeba tuto operaci provést manuálně, je velice silně doporučeno toto dělat v nějaké thread-safe části kódu. Programátor **musí** manuálně nastavit `busy` jako `False` po tom, co se sessionem skončil, jinak tento session bude nadále považován za zaneprázděný a tím pádem nikdy nedojde k jeho znovuužití.
 

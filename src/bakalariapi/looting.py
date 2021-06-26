@@ -1,3 +1,4 @@
+"""Modul obsahující `Looting`, `ResultSet` a `GetterOutput`."""
 from __future__ import annotations
 
 import json
@@ -39,6 +40,8 @@ GetterOutputTypeVar = TypeVar("GetterOutputTypeVar", BeautifulSoup, dict)
 
 
 class GetterOutput(Generic[GetterOutputTypeVar]):
+    """Třída používaná jako spojka mezi gettery a parsery."""
+
     def __init__(self, endpoint: str, data: GetterOutputTypeVar):
         self.endpoint: str = endpoint
         self.data: GetterOutputTypeVar = data
@@ -46,6 +49,8 @@ class GetterOutput(Generic[GetterOutputTypeVar]):
 
 
 class ResultSet:
+    """Třída používaná jako "lightweight looting"."""
+
     def __init__(
         self, loot: objects.BakalariObject | list[objects.BakalariObject] = None
     ):
@@ -56,11 +61,11 @@ class ResultSet:
     def add_loot(
         self, loot: objects.BakalariObject | list[objects.BakalariObject]
     ) -> ResultSet:
-        """Přidá loot do tohoto ResultSetu.
+        """Přidá loot.
 
         Args:
             loot:
-                Loot, který bude přidán do tohoto ResultSetu.
+                Loot, který bude přidán.
         """
         if not isinstance(loot, list):
             loot = [loot]
@@ -68,22 +73,49 @@ class ResultSet:
             self.data.setdefault(type(o).__name__, []).append(o)
         return self
 
-    def get(self, _type: Type[BakalariObj]) -> list[BakalariObj]:
-        t = _type.__name__
+    def get(self, type_: Type[BakalariObj]) -> list[BakalariObj]:
+        """Vrátí list objektů daného typu.
+
+        Args:
+            type_:
+                Typ objektů, který se má vrátit.
+
+        Returns:
+            List objektů.
+        """
+        t = type_.__name__
         if t in self.data:
             return cast(list[BakalariObj], self.data[t])
-        else:
-            return []
+        return []
         # return self.data[t] if t in self.data else []
 
     def merge(self, result_set: ResultSet) -> ResultSet:
+        """Přidá loot z ResultSetu.
+
+        Args:
+            result_set:
+                `ResultSet`, ze kterého bude přidán loot.
+                `ResultSet` zůstane stejný.
+
+        Returns:
+            Navrátí se tato instance.
+        """
         for (t, lst) in result_set.data.items():
             self.data[t] = self.data.setdefault(t, []) + lst
         return self
 
-    def remove(self, _type: Type[objects.BakalariObject]) -> ResultSet:
+    def remove(self, type_: Type[objects.BakalariObject]) -> ResultSet:
+        """Odstraní z lootu daný typ objektů.
+
+        Args:
+            type_:
+                Typ objektů, který se má odstranit.
+
+        Returns:
+            Navrátí se tato instance.
+        """
         try:
-            del self.data[_type.__name__]
+            del self.data[type_.__name__]
         except KeyError:
             pass
         return self
@@ -106,15 +138,21 @@ class Looting:
     class JSONEncoder(json.JSONEncoder):
         def default(self, o):
             full_type_name = utils.get_full_type_name(type(o))
-            LOGGER_SERIALIZER.debug("Serializing object %s resolved to type %s" % (o, full_type_name))
+            LOGGER_SERIALIZER.debug(
+                "Serializing object %s resolved to type %s", o, full_type_name
+            )
             if isinstance(o, datetime):
-                LOGGER_SERIALIZER.debug("... special handling (object seems like datetime instance)")
+                LOGGER_SERIALIZER.debug(
+                    "... special handling (object seems like datetime instance)"
+                )
                 return {
                     "_type": full_type_name,
                     "data": o.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
                 }
             if isinstance(o, utils.Serializable):
-                LOGGER_SERIALIZER.debug("... special handling (object implemets utils.Serializable protocol)")
+                LOGGER_SERIALIZER.debug(
+                    "... special handling (object implemets utils.Serializable protocol)"
+                )
                 return {"_type": full_type_name, "data": o.serialize()}
             return super().default(o)
 
@@ -123,15 +161,19 @@ class Looting:
             super().__init__(*args, object_hook=self.hook, **kwargs)
 
         def hook(self, o):
-            LOGGER_SERIALIZER.debug("Deserializing object %s" % o)
+            LOGGER_SERIALIZER.debug("Deserializing object %s", o)
             if "_type" not in o:
                 return o
             real_type = utils.resolve_string(o["_type"])
-            LOGGER_SERIALIZER.debug("... found \"_type\" value, resolved to %s" % real_type)
+            LOGGER_SERIALIZER.debug(
+                '... found "_type" value, resolved to %s', real_type
+            )
             if real_type == datetime:
                 return datetime.strptime(o["data"], "%Y-%m-%dT%H:%M:%S.%fZ")
             if issubclass(real_type, utils.Serializable):
-                LOGGER_SERIALIZER.debug("... resolved type has implementation of utils.Serializable protocol, deserializing via this protocol")
+                LOGGER_SERIALIZER.debug(
+                    "... resolved type has implementation of utils.Serializable protocol, deserializing via this protocol"
+                )
                 return real_type.deserialize(o["data"])
             raise TypeError("Unknown type to load; Type: " + o["_type"])
 
@@ -145,6 +187,7 @@ class Looting:
         # Pozn. z budoucnosti: Ta myšlenka nekonverotování stringu na typ je pěkná, ale nějak se to nepodařilo dodržet KEKW
 
     def __add_one(self, o: objects.BakalariObject):
+        """Přidá do lootu daný objekt."""
         if isinstance(o, objects.UnresolvedID):
             self.unresolved.setdefault(o.type.__name__, {})[o.ID] = o
         else:
@@ -156,6 +199,12 @@ class Looting:
             self.data.setdefault(type(o).__name__, {})[o.ID] = o
 
     def add_loot(self, loot: objects.BakalariObject | list[objects.BakalariObject]):
+        """Přidá loot.
+
+        Args:
+            loot:
+                Loot, který bude přidán.
+        """
         if not isinstance(loot, list):
             loot = [loot]
         self.__lock.acquire()
@@ -166,6 +215,13 @@ class Looting:
             self.__lock.release()
 
     def add_result_set(self, result_set: ResultSet):
+        """Přidá loot z ResultSetu.
+
+        Args:
+            result_set:
+                `ResultSet`, ze kterého bude přidán loot.
+                `ResultSet` zůstane stejný.
+        """
         self.__lock.acquire()
         try:
             for lst in result_set.data.values():
@@ -176,6 +232,15 @@ class Looting:
             self.__lock.release()
 
     def get(self, type_: Type[BakalariObj]) -> list[BakalariObj]:
+        """Vrátí list objektů daného typu.
+
+        Args:
+            type_:
+                Typ objektů, který se má vrátit.
+
+        Returns:
+            List objektů.
+        """
         if type_ == objects.UnresolvedID:
             return cast(
                 list[BakalariObj], list(self.unresolved[type_.__name__].values())
@@ -189,15 +254,20 @@ class Looting:
             return []
 
     def resolve_unresolved(self, bakalariAPI: BakalariAPI):
+        """Pokusí "vyřešit" všechny `UnresolvedID`.
+
+        Args:
+            bakalariAPI:
+                Instance bakalariAPI, přes kterou se mají `UnresolvedID` "vyřešit".
+        """
         unresolved = []
         for dct in self.unresolved.values():
             for v in dct.values():
                 unresolved.append(v)
-        self.add_result_set(
-            bakalariAPI._resolve(unresolved)
-        )  # pylint: disable=protected-access
+        self.add_result_set(bakalariAPI._resolve(unresolved))
 
-    def export_JSON(self, *args, **kwargs):
+    def export_json(self, *args, **kwargs):
+        """Exportuje jako JSON data."""
         return json.dumps(
             {
                 "data": self.data,
@@ -208,7 +278,8 @@ class Looting:
             **kwargs
         )
 
-    def import_JSON(self, json_string: str, *args, **kwargs):
+    def import_json(self, json_string: str, *args, **kwargs):
+        """Importuje JSON data."""
         parsed = json.loads(json_string, cls=self.JSONDecoder, *args, **kwargs)
         self.data = parsed["data"]
         self.unresolved = parsed["unresolved"]

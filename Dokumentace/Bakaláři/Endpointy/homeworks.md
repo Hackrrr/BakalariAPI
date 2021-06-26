@@ -22,7 +22,7 @@ GET /next/ukoly.aspx HTTP/1.1
 Vrací se HTML, které musíme scrapovat.
 
 # Extrakce dat - HTML => Data
-Nejdříve si najdeme tabulku s ID `grdukoly_DXMainTable`.Ta má v sobě řádky s úkoly, ale má v sobě i řádek s "hlavičkou" tablky (normálně bych se divil, proč tu není `<thead>` a `<tbody>` (jako u jiných tabulek), ale jelikož to jsou Bakaláři, tak to jsem schopnej relativně "snadno" (resp. normálně) pochopit). Vezmeme si tedy `<tbody>` tag a z něho každý `<tr>` tag kromě prvního (= header). `<tr>` tag pak vypadá nějak takto:
+Nejdříve si najdeme tabulku s ID `grdukoly_DXMainTable`.Ta má v sobě řádky s úkoly, ale má v sobě i řádek s "hlavičkou" tabulky (normálně bych se divil, proč tu není `<thead>` a `<tbody>` (jako u jiných tabulek), ale jelikož to jsou Bakaláři, tak to jsem schopný relativně "snadno" (resp. normálně) pochopit). Vezmeme si tedy `<tbody>` tag a z něho každý `<tr>` tag kromě prvního (= hlavička). `<tr>` tag pak vypadá nějak takto:
 ```html
 <tr id="grdukoly_DXDataRow0" title="" class="dxgvDataRow_NextBlueTheme celldo2 _electronic dxgvLVR" style="" aria-describedby="ui-id-3">
 	<td id="grdukoly_tccell0_0" class="dxgv">
@@ -46,7 +46,7 @@ Nejdříve si najdeme tabulku s ID `grdukoly_DXMainTable`.Ta má v sobě řádky
                </a>
                <!-- ... -->
                <!-- ... -->
-               <!-- Konec seznamu příloh (Tento komentář se v responsu nevyskytuje :) (ani ty předchozí tečky)) -->
+               <!-- Konec seznamu příloh (Tento, ani předchozí komentáře se v responsu nevyskytuje :)) -->
             </span>
 			</span>
 		</div>
@@ -62,15 +62,10 @@ Nejdříve si najdeme tabulku s ID `grdukoly_DXMainTable`.Ta má v sobě řádky
    </td>
 </tr>
 ```
-Myslím, že nemá cenu vysvětlovat, jak se k daným datům dostat... Zmíním jen zákeřnost u hodnoty `*DATUM_ZADÁNÍ*` - okolo ní jsou mezery, takže pozor při parsování.
+Myslím, že takhle popsané to stačí a zbytek zvládneš sám/sama. Zmíním jen zákeřnost u hodnoty `*DATUM_ZADÁNÍ*` - okolo ní jsou mezery, takže pozor při parsování.
 
 # Selenium
-Jak jsem zmiňoval, tak tato stránka je ASP.NET forma... Tzn. že s ní nemůžeme nějak rozumně "ovládat" (tím myslím například poslat prostý POST request s třeba dvěma parametry). Proto jsem si přitáhl (a doufám, že vy taky) těžký kalibr - Selenium. Na této stránce chceme interakovat s přepínačem na zobrazení (ne)hotových úkolů, odesíláním úkolů a změnou stránky (popř. změnit velikost stránky). Pro přepínač na (ne)hotové úkoly můžeme použít XPath `//span[span/input[@id='cphmain_cbUnfinishedHomeworks_S']]`.
-
-
-TODO: Napsat tohle nějak normálně a přehledně... Prostě nějak vhodně než sem jen fláknout informace (téměř) out-of-context... (Protože teď už přepisuji tuto celou dokumentaci o Bakalářích čtvrtý den a už mi z toho trochu hrabe... :) (a vážně se mi tu (teď) nechce rozepisovat o Seleniu a XPath).)
-
-
+Jak jsem zmiňoval, tak tato stránka je ASP.NET forma. Tzn., že s ní nemůžeme nějak rozumně "ovládat" (tím myslím například poslat prostý POST request s třeba dvěma parametry). Proto jsem si přitáhl (a doufám, že vy taky) těžký kalibr - Selenium. Na této stránce chceme interagovat s přepínačem na zobrazení (ne)hotových úkolů, odesíláním úkolů a změnou stránky (popř. změnit velikost stránky). Pro přepínač na (ne)hotové úkoly můžeme použít XPath `//span[span/input[@id='cphmain_cbUnfinishedHomeworks_S']]`.
 
 # Výzkum
-Nalezeno přes proklik v menu. "Cesty" k elementům získány manuální analýzou HTML.
+Nalezeno přes menu. "Cesty" k elementům získány manuální analýzou HTML.
