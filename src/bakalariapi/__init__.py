@@ -12,6 +12,7 @@ Browser - Enum pro SeleniumHandler
 
 from . import bakalari, exceptions, looting, modules, seleniumhandler, sessions, objects
 from .bakalari import LAST_SUPPORTED_VERSION, BakalariAPI, GetMode
+from .looting import Looting
 from .objects import (
     ServerInfo,
     UserInfo,

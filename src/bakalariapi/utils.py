@@ -6,7 +6,8 @@ import sys
 from datetime import datetime, timedelta
 from typing import Any, Protocol, TypeVar, runtime_checkable
 
-from bs4 import BeautifulSoup
+from bs4 import Tag
+from typing import cast,
 from requests.cookies import RequestsCookieJar
 from selenium.webdriver.remote.webdriver import WebDriver
 
@@ -47,7 +48,7 @@ def line_iterator(text: str):
         prevnl = nextnl
 
 
-def bs_get_text(soup: BeautifulSoup) -> str:
+def bs_get_text(soup: Tag) -> str:
     """BeautifulSoup.get_text(), ale tak trochu jinak
     BeautifulSoup dělá vynikající práci... Ale na prasárny Bakalářů to ani tak nestačí
     To co tohle udělá a '.get_text()' ne:
@@ -58,11 +59,12 @@ def bs_get_text(soup: BeautifulSoup) -> str:
 
     # TODO: Převést <p> na nové řádky
     for br in soup("br"):
-        br.replace_with("\n" + br.text)
+        # Ok, tady má `replace_with()` špatně stub a správně má brát i string
+        br.replace_with("\n" + cast(Tag, br).text)
 
     body = soup.find("body")
     if body is not None:
-        soup = body
+        soup = cast(Tag, body)
 
     return soup.get_text().strip()
 

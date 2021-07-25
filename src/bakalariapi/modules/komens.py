@@ -1,12 +1,14 @@
 """Modul obsahující funkce týkající se Komens zpráv."""
 from datetime import datetime
 
-from bs4 import BeautifulSoup
+from typing import cast
+from bs4 import BeautifulSoup, Tag
 
 from ..bakalari import BakalariAPI, Endpoint, _register_parser, _register_resolver
 from ..looting import GetterOutput, ResultSet
 from ..objects import Komens, KomensFile, UnresolvedID
 from ..sessions import RequestsSession
+from ..exceptions import MissingElementError
 
 
 def getter_komens_ids(
@@ -46,13 +48,27 @@ def getter_info(
 @_register_parser(Endpoint.KOMENS, BeautifulSoup)
 def parser_main(getter_output: GetterOutput[BeautifulSoup]) -> ResultSet:
     output = ResultSet()
-    komens_list = (
-        getter_output.data.find(id="message_list_content")
-        .find("ul")  # type: ignore # Jelikož může být None, tak Pylance naříká
-        .find_all("li", recursive=False)
-    )
+
+    # None-aware je deferred... Sadge
+    #komens_list = getter_output.data.find(id="message_list_content")?.find("ul")?.find_all("li", recursive=False)
+
+    x = getter_output.data.find(id="message_list_content")
+    if x is None:
+        raise MissingElementError('find(id="message_list_content")')
+    x = x.find("ul")
+    if x is None:
+        raise MissingElementError('find(id="message_list_content").find("ul")')
+    # `cast()` protože `find()` může najít i NavigableString, který ale nemá `find_all()` (teda ho nemůžeme volat)...
+    komens_list = cast(Tag, x)("li", recursive=False)
+    
     for komens in komens_list:
-        output.add_loot(UnresolvedID(komens.find("table")["data-idmsg"], Komens))
+        komens = cast(Tag, komens) # ... a znovu ...
+        table = komens.find("table")
+        if table is None:
+            raise MissingElementError('komens.find("table")')
+        table = cast(Tag, table) # ... a znovu
+        # `cast()` na string, protože atribut může být i multivalued (=> list), což by ale u "data-idmsg" hrozit nemělo
+        output.add_loot(UnresolvedID(cast(str, table["data-idmsg"]), Komens))
     return output
 
 

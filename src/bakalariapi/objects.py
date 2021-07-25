@@ -333,6 +333,7 @@ class Meeting(BakalariObject):
 
     def __init__(
         self,
+        # Actually je to int, ale všechny ostaní IDčka jsou string, takže se budeme tvářit že je string i tohle...
         ID: str,
         ownerID: str,
         name: str,

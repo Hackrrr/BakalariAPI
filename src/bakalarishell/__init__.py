@@ -11,13 +11,10 @@ import sys
 import threading
 import time
 import traceback
+import warnings
 import webbrowser
 
-from datetime import (
-    datetime,
-    timedelta,
-    timezone,
-)
+from datetime import datetime, timedelta, timezone
 
 from typing import Callable
 
@@ -28,9 +25,9 @@ from prompt_toolkit.shortcuts.progress_bar import ProgressBar, ProgressBarCounte
 from prompt_toolkit.input import create_input
 from prompt_toolkit.keys import Keys
 
-from rich import (
-    inspect,
-)  # Import kvůli tomu, aby jsme mohli volat rovnou 'inspect()' v python execu ze shellu
+# Import kvůli tomu, aby jsme mohli volat rovnou 'inspect()' v python execu ze shellu
+from rich import inspect
+
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.syntax import Syntax
@@ -279,7 +276,10 @@ def Init():
             return
     print("Přihlašovací údaje ověřeny a jsou správné")
     print("Nastavuji...")
-    api.init()
+    with warnings.catch_warnings():
+        # Nechceme dostat `VersionMismatchWarning`, protože v `SeverInfo()` kontrolujeme verzi manuálně
+        warnings.simplefilter("ignore")
+        api.init()
     print("Nastaveno:")
     ServerInfo()
 
@@ -292,10 +292,7 @@ def ServerInfo():
         f"Datum verze Bakalářů: {'Není k dispozici' if api.server_info.version_date is None else api.server_info.version_date.strftime('%d. %m. %Y')}\n"
         f"Evidenční číslo verze Bakalářů: {'Není k dispozici' if api.server_info.evid_number is None else api.server_info.evid_number}"
     )
-    if (
-        api.server_info.version is not None
-        and api.server_info.version != bakalariapi.LAST_SUPPORTED_VERSION
-    ):
+    if not api.is_version_supported():
         print("*** Jiná verze Bakalářů! Všechny funkce nemusejí fungovat správně! ***")
 
 

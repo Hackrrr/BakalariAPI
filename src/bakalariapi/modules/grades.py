@@ -2,7 +2,8 @@
 import json
 from datetime import datetime
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
+from typing import cast
 
 from ..bakalari import BakalariAPI, Endpoint, _register_parser
 from ..looting import GetterOutput, ResultSet
@@ -33,7 +34,7 @@ def parser(getter_output: GetterOutput[BeautifulSoup]) -> ResultSet:
     output = ResultSet()
     znamky_list = getter_output.data("div", attrs={"data-clasif": True})
     for znamka in znamky_list:
-        data = json.loads(znamka["data-clasif"])
+        data = json.loads(cast(str, cast(Tag, znamka)["data-clasif"]))
         output.add_loot(
             Grade(
                 data["id"],

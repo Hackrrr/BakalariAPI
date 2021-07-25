@@ -179,7 +179,7 @@ class SeleniumSession(BakalariSession):
         enable_requests_acceleration: bool = True,
     ):
         if bakalariAPI.selenium_handler is None:
-            raise exceptions.BakalariMissingSeleniumHandlerError()
+            raise exceptions.MissingSeleniumHandlerError()
         self.session: WebDriver = bakalariAPI.selenium_handler.open()
         self.requests_acceleration: bool = enable_requests_acceleration
         super().__init__(bakalariAPI, setBusy, login)

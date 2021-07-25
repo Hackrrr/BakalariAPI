@@ -2,7 +2,8 @@
 import logging
 from datetime import datetime
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
+from typing import cast
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as SeleniumConditions
@@ -12,6 +13,7 @@ from ..bakalari import BakalariAPI, Endpoint, _register_parser
 from ..looting import GetterOutput, ResultSet
 from ..objects import Homework, HomeworkFile
 from ..sessions import RequestsSession, SeleniumSession
+from ..exceptions import MissingElementError
 
 LOGGER = logging.getLogger("bakalariapi.modules.homeworks")
 
@@ -47,7 +49,7 @@ def get_slow(
         ).click()
         # Proč jsem musel šáhnout po XPath? Protože Bakaláři :) Input, podle kterého to můžeme najít, tak je schovaný...
         # A jeho parrent taky... A protože je to schovaný, tak s tím nemůžeme iteragovat... Takže potřebujeme parrenta
-        # parrenta toho inputu, který už vidět je a můžeme na něj kliknout :)
+        # parrenta toho inputu, který už vidět je a můžeme na něj kliknout. Prostě super :)
 
     checkID = ""
 
@@ -57,7 +59,7 @@ def get_slow(
             GetterOutput(Endpoint.HOMEWORKS, BeautifulSoup(source, "html.parser"))
         )
 
-        if temp_result.get(Homework)[0].ID == checkID:
+        if temp_result.get(Homework)[0].ID == checkID:  # Náš "fail check"
             # Očividně tedy selhalo pozorovnání loading obrazovky a parsujeme stejnou stránku dvakrát, takže cyklus ukončujeme
             # Jen tak mimochodem... toto taky znamená, že Bakaláři jsou zase bugnutý a stránka se neposunula i přesto, že další stránka exististuje
             # (nebo jsme selhali my s detekování existence další stánky, o čemž ale dost pochybuji)
@@ -80,8 +82,9 @@ def get_slow(
                     )
                 )
             except TimeoutException:
-                continue  # Je možný, že načítání bylo rychlejší než náš 0.1 s check na loading screen, takže jdeme rovnou parsovat další stránku
-                # tuhle "chybu" kdyžtak zachytíme naším "fail checkem", který případně cyklus ukončí
+                # Je možný, že načítání bylo rychlejší než náš 0.1 s check na loading screen, takže jdeme rovnou parsovat další stránku
+                # Tuto "chybu" kdyžtak zachytíme naším "fail checkem", který případně cyklus ukončí
+                continue
             try:
                 WebDriverWait(session.session, second_loading_timeout).until_not(
                     SeleniumConditions.visibility_of_element_located(
@@ -90,7 +93,7 @@ def get_slow(
                 )
             except TimeoutException:
                 LOGGER.info(
-                    "Bakaláři probrally stuck in infinity loop while loading homeworks, ending homework getter"
+                    "Probrally stuck in infinity loop while loading homeworks, ending homework getter"
                 )
                 break  # Pravděpodobně nějaký infinity loading od Bakalářů, se kterým mi nic dělat nemůžeme eShrug
         else:
@@ -109,31 +112,36 @@ def parser(getter_output: GetterOutput[BeautifulSoup]) -> ResultSet:
         # Žádné úkoly (asi) nejsou
         return ResultSet()
     tmp = table.find("tbody")
-    if (
-        tmp is not None
-    ):  # Jelikož to jsou Bakaláři, tak mají 2 rozdílné struktury :); poprvé jsou řádky přímo v <table>, podruhé ještě navíc v <tbody>
+    # Jelikož to jsou Bakaláři, tak mají 2 rozdílné struktury :) Poprvé jsou řádky přímo v <table>, podruhé jsou vnořeny ještě v <tbody>
+    if tmp is not None:
         table = tmp
-    rows = table("tr", recursive=False)
-    for row in rows[1:]:
-        # První je hlavička tabulky (normálně bych se divil, proč tu není <thead> a <tbody> (jako u jiných tabulek), ale jsou to Bakaláři, takže to jsem schopnej pochopit)
-        tds = row("td")
-        datum_odevzdani = datetime.strptime(
-            tds[0].find("div")("div")[1].text.strip(), "%d. %m."
-        )
-        predmet = tds[1].text
-        zadani = tds[2].text
-        datum_zadani = datetime.strptime(tds[3].text.strip(), "%d. %m.")
-        hotovo = tds[5].div.input["value"].lower() == "true"
-        ID = tds[6].span["target"]  # = tds[-1]
-
-        files = []
-        # if len(tds[4].get_text().strip()) != 0: # Actually nemusíme dělat ani tenhle check a jít rovnou k extrkaci, ale tohle je asi rychlejší
-        for a in tds[4]("a"):
-            files.append(
-                HomeworkFile(a["href"][len("getFile.aspx?f=") :], a.span.text, ID)
+    rows = cast(Tag, table)("tr", recursive=False)
+    for row in rows[1:]:  # První řádek je hlavička tabulky, takže přeskakujeme
+        # Ok, tohle je špatný a ano, vím to... Ale TBH, pokud se něco pokazí, tak se stejně bude debugovat
+        # více do podrobna, takže informace kde přesně v "řetězu" je chyba až tak podstatná není
+        # Ignore `tds` => `tds` je Unknown => Pylance si nestěžuje na dalších řádkách
+        # Pokud bychom správně napověděli přes `cast()`, že `tds` je `list[Tag]`, tak pak si Pylance stěžuje mnohem více
+        # a museli bychom doslova na každý řádek cpát další `cast()` (někde i vícekrát na jeden řádek)
+        try:
+            tds = row("td")  # type: ignore # viz víše
+            datum_odevzdani = datetime.strptime(
+                tds[0].find("div")("div")[1].text.strip(), "%d. %m."
             )
+            predmet = tds[1].text
+            zadani = tds[2].text
+            datum_zadani = datetime.strptime(tds[3].text.strip(), "%d. %m.")
+            hotovo = tds[5].div.input["value"].lower() == "true"
+            ID = tds[6].span["target"]  # = tds[-1]
 
-        output.add_loot(
-            Homework(ID, datum_odevzdani, predmet, zadani, datum_zadani, hotovo, files)
-        )
+            files = [
+                HomeworkFile(a["href"][len("getFile.aspx?f=") :], a.span.text, ID)
+                for a in tds[4]("a")
+            ]
+            output.add_loot(
+                Homework(
+                    ID, datum_odevzdani, predmet, zadani, datum_zadani, hotovo, files
+                )
+            )
+        except (TypeError, AttributeError):
+            raise MissingElementError()
     return output

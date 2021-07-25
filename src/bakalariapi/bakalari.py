@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Callable, Type, overload
@@ -291,7 +292,7 @@ class BakalariAPI:
     def init(self):
         """Získá některé informace o systému Bakaláři a uživatelovi.
 
-        Volání této metody není nutné, avšak zatím není jiný způsob (resp. není implementován), jak tyto informace získat.
+        Volání této metody není nutné, avšak zatím není (implementován) jiný způsob, jak tyto informace získat.
         """
         session = self.session_manager.get_session_or_create(sessions.RequestsSession)
 
@@ -312,6 +313,20 @@ class BakalariAPI:
         self.server_info.version = data["applicationVersion"]
         self.server_info.version_date = datetime.strptime(data["appVersion"], "%Y%m%d")
         self.server_info.evid_number = int(data["evidNumber"])
+
+        if not self.is_version_supported():
+            warnings.warn(exceptions.VersionMismatchWarning())
+    
+    def is_version_supported(self):
+        """Zkontroluje, jestli `BakaláriAPI` podporuje verzi Bakalářů, která je na serveru.
+
+        V současné chvíli pouze ověřuje, zda verze Bakalářů je shodná s `LAST_SUPPORTED_VERSION`.
+        
+        Returns:
+            Vrátí `True` pokud se shodují, jinak `False`.
+            Pokud verze Bakalářů nebyla získána (tzn. je `None`), vrátí `False`.
+        """
+        return self.server_info.version == LAST_SUPPORTED_VERSION
 
     # GRADES
     @overload
