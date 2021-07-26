@@ -24,17 +24,19 @@ class BakalariQuerrySuccessError(BakalariAPIError):
 class MissingSeleniumHandlerError(BakalariAPIError):
     """Výjimka, která nastane při pokusu o Selenium featuru, když není dostupná SeleniumHandler instance."""
 
+
 class MissingElementError(BakalariAPIError):
     """Výjimka, která nastane při chybějícím elementu jak v HTML, tak v JSON datech.
-    
+
     Tato výjimka by měla nastat pouze v případě, kdy verze Bakalářů je jiná, než `LAST_SUPPORTED_VERSION`.
     Pokud výjimka nastane i v jiném případě (tedy když se verze shodují), jde o bug v `BakalářiAPI`.
     """
 
+
 ### WARNING ###
 class VersionMismatchWarning(BakalariAPIWarning):
     """Výjimka, která nastane při neshodě verze Bakalářů a `LAST_SUPPORTED_VERSION`.
-    
+
     Tento warning se může ignorovat, jelikož ve většině případů se nic závažného neděje.
     Je poteřeba mít na paměti, že pokud tento warning nastane, `BakalářiAPI` může být nestabilní.
     """

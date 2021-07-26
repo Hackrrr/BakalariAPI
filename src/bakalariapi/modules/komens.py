@@ -50,7 +50,7 @@ def parser_main(getter_output: GetterOutput[BeautifulSoup]) -> ResultSet:
     output = ResultSet()
 
     # None-aware je deferred... Sadge
-    #komens_list = getter_output.data.find(id="message_list_content")?.find("ul")?.find_all("li", recursive=False)
+    # komens_list = getter_output.data.find(id="message_list_content")?.find("ul")?.find_all("li", recursive=False)
 
     x = getter_output.data.find(id="message_list_content")
     if x is None:
@@ -60,13 +60,13 @@ def parser_main(getter_output: GetterOutput[BeautifulSoup]) -> ResultSet:
         raise MissingElementError('find(id="message_list_content").find("ul")')
     # `cast()` protože `find()` může najít i NavigableString, který ale nemá `find_all()` (teda ho nemůžeme volat)...
     komens_list = cast(Tag, x)("li", recursive=False)
-    
+
     for komens in komens_list:
-        komens = cast(Tag, komens) # ... a znovu ...
+        komens = cast(Tag, komens)  # ... a znovu ...
         table = komens.find("table")
         if table is None:
             raise MissingElementError('komens.find("table")')
-        table = cast(Tag, table) # ... a znovu
+        table = cast(Tag, table)  # ... a znovu
         # `cast()` na string, protože atribut může být i multivalued (=> list), což by ale u "data-idmsg" hrozit nemělo
         output.add_loot(UnresolvedID(cast(str, table["data-idmsg"]), Komens))
     return output

@@ -10,23 +10,23 @@ Browser - Enum pro SeleniumHandler
 """
 
 
-from . import bakalari, exceptions, looting, modules, seleniumhandler, sessions, objects
+from . import bakalari, exceptions, looting, modules, objects, seleniumhandler, sessions
 from .bakalari import LAST_SUPPORTED_VERSION, BakalariAPI, GetMode
 from .looting import Looting
 from .objects import (
-    ServerInfo,
-    UserInfo,
-    BakalariObject,
-    UnresolvedID,
     BakalariFile,
-    KomensFile,
+    BakalariObject,
+    Grade,
+    Homework,
     HomeworkFile,
     Komens,
-    Grade,
-    MeetingProvider,
+    KomensFile,
     Meeting,
+    MeetingProvider,
+    ServerInfo,
     Student,
-    Homework,
+    UnresolvedID,
+    UserInfo,
 )
 from .seleniumhandler import Browser, SeleniumHandler
 
@@ -52,3 +52,4 @@ __all__ = [
     "Student",
     "Homework",
 ]
+__version__ = "3.0.0-dev"

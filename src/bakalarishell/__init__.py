@@ -2,42 +2,63 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import getpass
 import io
-
-# from asyncio import get_event_loop_policy # Ok, teď absolutně nemám tušení co dělám (jakože vůbec), ale doufám, že to takhle zprovozním
+import json
 import logging
 import logging.config
+import os
 import sys
 import threading
 import time
 import traceback
 import warnings
 import webbrowser
-
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Callable, cast
 
-from typing import Callable
-
+import appdirs
+import bakalariapi
 from bs4 import BeautifulSoup
-
-from prompt_toolkit.key_binding import KeyPress
-from prompt_toolkit.shortcuts.progress_bar import ProgressBar, ProgressBarCounter
 from prompt_toolkit.input import create_input
+from prompt_toolkit.key_binding import KeyPress
 from prompt_toolkit.keys import Keys
+from prompt_toolkit.shortcuts.progress_bar import ProgressBar, ProgressBarCounter
 
 # Import kvůli tomu, aby jsme mohli volat rovnou 'inspect()' v python execu ze shellu
 from rich import inspect
-
+from rich import print as rich_print
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.syntax import Syntax
 
-import bakalariapi
 from . import shell
 from .shell import cls
 
 api: bakalariapi.BakalariAPI
 shell_instance: shell.Shell
+dirs = appdirs.AppDirs(appauthor="BakalariAPI", appname="bakalarishell", roaming=True)
+CONFIG_FILE_PATH = os.path.join(dirs.user_config_dir, "config.json")
+
+
+@dataclass
+class Args:
+    url: str
+    username: str
+    password: str
+
+    browser: str
+    executable_path: str
+
+    verbose: int
+
+    test: int
+    auto_run: bool
+    no_init: bool
+
+
+args: Args
 
 ##################################################
 #####                 FUNKCE                 #####
@@ -72,89 +93,113 @@ def dialog_cislo(text: str = "", default: int | None = None):
         print("Špatná hodnota")
 
 
+def print_keys(keys: list[tuple[str, str] | str], enter_pokracovani=True):
+    output = ["Enter - Pokračování"] if enter_pokracovani else []
+    for key in keys:
+        if isinstance(key, tuple):
+            if key[1] == "":
+                output.append(key[0])
+            else:
+                output.append(f"[{key[1]}]{key[0]}[/{key[1]}]")
+        else:
+            output.append(key)
+    rich_print(", ".join(output))
+
+
 def show(obj: bakalariapi.objects.BakalariObject, title: str | None = None):
     if title is not None:
         print(title)
 
     if isinstance(obj, bakalariapi.Komens):
-        print(obj.format())
-        print("\n\n\n")
-        if (
-            obj.need_confirm
-            and not obj.confirmed
-            and dialog_ano_ne("Zpráva vyžaduje potvrzení. Chcete potvrdit přečtení?")
-        ):
-            print("Potvrzuji zprávu...")
-            obj.confirm(api)
-            print("Zpráva potvrzena")
+        rich_print(obj.format(True))
+        print("\n\n")
+        print_keys([("P - Potrvrdí přečtení zprávy", "" if obj.confirmed else "green")])
 
-        print(
-            "Enter - Pokračování, P - Potrvrdí přečtení zprávy"
-        )  # TODO: Barvičky kláves
-        print()
-
-        def komens_key_handler(key_press, done):
+        def komens_key_handler(key_press: KeyPress, done: Callable):
+            o = cast(
+                bakalariapi.Komens, obj
+            )  # Pyright nebere v potaz IF z outer scopu (https://github.com/microsoft/pyright/issues/1731)
             if key_press.key == "p":
                 print("Potvrzuji zprávu...")
-                obj.confirm(api)  # type: ignore # Protože pyright nebere v nested funkci v potaz IFy (takže obj je pořád *jen* BakalariObject)
+                o.confirm(api)
                 print("Zpráva potvrzena")
 
         asyncio.run(keyhandler(komens_key_handler))
 
     elif isinstance(obj, bakalariapi.Grade):
-        print(obj.format())
-        print("\n")
-        print("Enter - Pokračování, Z - Zobrazí JSON data")
+        rich_print(obj.format(True))
+        print("\n\n")
 
-        def grade_key_handler(key_press: KeyPress, done: Callable):
-            return
-            key = key_press.key.lower()
-            if key == "z":
-                c = Console()
-                c.print(Syntax(str(BeautifulSoup(obj.content, "html.parser").prettify()), "html"))  # type: ignore # viz výš
-
-        asyncio.run(keyhandler(grade_key_handler))
+        asyncio.run(keyhandler(None))
 
     elif isinstance(obj, bakalariapi.Meeting):
-        print(obj.format())
+        rich_print(obj.format(True))
         print("\n\n")
 
-        print(
-            "Enter - Pokračování, O - Otevře schůzku v prohlížeči, Z - Zobrazí HTML pozvánky"
-        )  # TODO: Barvičky kláves
+        is_before = obj.is_before_start
+        delta = obj.start_time_delta
+        color = ""
+        # Delta totiž může být očividně i negativní
+        if not is_before and delta >= timedelta(hours=-1):
+            color = "red"
+        elif is_before and delta <= timedelta(minutes=5):
+            color = "yellow"
+        elif is_before and delta <= timedelta(minutes=30):
+            color = "green"
+
+        print_keys(
+            [("O - Otevře schůzku v prohlížeči", color), "Z - Zobrazí HTML pozvánky"]
+        )
 
         def meeting_key_handler(key_press: KeyPress, done: Callable):
+            o = cast(
+                bakalariapi.Meeting, obj
+            )  # Pyright nebere v potaz IF z outer scopu
             key = key_press.key.lower()
             if key == "o":
-                webbrowser.open(obj.joinURL)  # type: ignore # viz výš
+                webbrowser.open(o.join_url)
             elif key == "z":
                 c = Console()
-                c.print(Syntax(str(BeautifulSoup(obj.content, "html.parser").prettify()), "html"))  # type: ignore # viz výš
+                c.print(
+                    Syntax(
+                        str(BeautifulSoup(o.content, "html.parser").prettify()), "html"
+                    )
+                )
 
         asyncio.run(keyhandler(meeting_key_handler))
-    elif isinstance(obj, bakalariapi.Student):
-        pass
+    # elif isinstance(obj, bakalariapi.Student):
+    #     pass
 
     elif isinstance(obj, bakalariapi.Homework):
-        print(obj.format())
+        rich_print(obj.format(True))
         print("\n\n")
 
-        print(
-            "Enter - Pokračování, H - Označí úkol jako hotový, N - Označí úkol jako nehotový, Z - Zobrazí HTML úkolu"
-        )  # TODO: Barvičky kláves
-        print()
+        print_keys(
+            [
+                ("H - Označí úkol jako hotový", "" if obj.done else "green"),
+                "N - Označí úkol jako nehotový",
+                "Z - Zobrazí HTML úkolu",
+            ]
+        )
 
         def homework_key_handler(key_press: KeyPress, done: Callable):
+            o = cast(
+                bakalariapi.Homework, obj
+            )  # Pyright nebere v potaz IF z outer scopu
             key = key_press.key.lower()
             if key == "h":
-                obj.mark_as_done(api, True)  # type: ignore # viz výš
+                o.mark_as_done(api, True)
                 print("Úkol označen jako hotový")
             elif key == "n":
-                obj.mark_as_done(api, False)  # type: ignore # viz výš
+                o.mark_as_done(api, False)
                 print("Úkol označen jako nehotový")
             elif key == "z":
                 c = Console()
-                c.print(Syntax(str(BeautifulSoup(obj.content, "html.parser").prettify()), "html"))  # type: ignore # viz výš
+                c.print(
+                    Syntax(
+                        str(BeautifulSoup(o.content, "html.parser").prettify()), "html"
+                    )
+                )
 
         asyncio.run(keyhandler(homework_key_handler))
 
@@ -163,7 +208,7 @@ def show(obj: bakalariapi.objects.BakalariObject, title: str | None = None):
 
 
 async def keyhandler(
-    handler: Callable[[KeyPress, Callable[[], None]], None],
+    handler: Callable[[KeyPress, Callable[[], None]], None] | None,
     *,
     done_on_enter: bool = True,
     mask_keyboard_interrupt: bool = False,
@@ -179,10 +224,15 @@ async def keyhandler(
                     Zaznamenaný stisk klávesy.
                 done:
                     Funkce, která při zavolání ukončí záznam kláves.
+            Pokud je `None`, nic se nevolá.
+            Hodnota `None` má smysl pouze pokud parametr `done_on_enter` je `True`.
         done_on_enter:
             Pokud True, tak se při klávese Enter ukončí záznam kláves.
             Pozn.: Pokud True, tak se funkce v parametru handler nevolá.
-
+        mask_keyboard_interrupt:
+            Pokud `True`, tak `KeyboardInterrupt` bude potlačen.
+            Pokud `False`, `KeyboardInterrupt` bude propagován.
+            Pozn.: Ve skutečnosti je `KeyboardInterrupt` simulován, jelikož z asyncio loopu `KeyboardInterrupt` nepřichází.
     Příklad:
     ```
     def handler(keys_press: KeyPress, done: Callable):
@@ -206,7 +256,7 @@ async def keyhandler(
                 done()
             elif not mask_keyboard_interrupt and key_press.key == Keys.ControlC:
                 raise KeyboardInterrupt
-            else:
+            elif handler is not None:
                 handler(key_press, done)
 
     with inpt.raw_mode():
@@ -214,33 +264,23 @@ async def keyhandler(
             await evnt.wait()
 
 
-def check_io_file() -> bool:
-    """Zkontroluje, jestli je specifikován I/O soubor, případně vyzve uživatele o vytvoření.
+def get_io_file(file: str, mode: str = "r+") -> io.IO:
+    """Vytvoří a vrátí file handler na daný soubor `file` v uživatelské (data) složce."""
+    path = os.path.join(dirs.user_data_dir, file)
+    if not os.path.exists(path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "x"):
+            pass
+    return open(path, mode)
 
-    Returns:
-        Pokud soubor již existoval či uživatel vytvořil nový, vratí `True`, jinak `False`.
-    """
-    if parsed_args.file is None:
-        try:
-            if dialog_ano_ne(
-                "Nebyl nalezen vstupní/výstupní soubor. Chcete určit soubor?"
-            ):
-                name = input("Název souboru: ")
-                try:
-                    parsed_args.file = open(name, "x")
-                except FileExistsError:
-                    if dialog_ano_ne(
-                        f"Soubor s jménem '{name}' již existuje. Pokud bude tento soubor použit, jeho obsah může být smazán. Chcete ho přesto použít?"
-                    ):
-                        parsed_args.file = open(name, "r+")
-                    else:
-                        return False
-                return True
-            else:
-                return False
-        except KeyboardInterrupt:
-            return False
-    return True
+
+def save_config():
+    if not os.path.exists(CONFIG_FILE_PATH):
+        os.makedirs(os.path.dirname(CONFIG_FILE_PATH), exist_ok=True)
+        with open(CONFIG_FILE_PATH, "x"):
+            pass
+    with open(CONFIG_FILE_PATH, "w") as f:
+        json.dump(args.__dict__, f)
 
 
 ##################################################
@@ -479,31 +519,21 @@ def Command_Ukoly(fast: bool = False, force_fresh: bool = False):
 def Command_Konec(nice: bool = True):
     shell_instance.stop_loop()
     api.kill(nice)
-    if not parsed_args.file is None:
-        parsed_args.file.close()
 
 
-def Command_Export():
-    if not check_io_file():
-        print("Nelze exportovat data, jelikož není specifikován soubor")
-        return
+def Command_Export(file_name: str = "main"):
     print("Generace JSON dat...")
-    f: io.TextIOWrapper = parsed_args.file
-    f.write(api.looting.export_json())
-    f.truncate()  # Odstraníme data, která jsou případně po JSONu, co jsme teď napsali (třeba pozůstatek po předchozím JSONu, pokud byl delší, jak náš současný)
-    f.seek(0, 0)
+    with get_io_file(file_name) as f:
+        f.write(api.looting.export_json())
+        # Odstraníme data, která jsou případně po JSONu, co jsme teď napsali (třeba pozůstatek po předchozím JSONu, pokud byl delší, jak náš současný)
+        f.truncate()
+    print(f"JSON data vygenerována a zapsána do souboru '{file_name}'")
 
-    print(f"JSON data vygenerována a zapsána do souboru '{f.name}'")
 
-
-def Command_Import():
-    if not check_io_file():
-        print("Nelze importovat data, jelikož není specifikován soubor")
-        return
-    f: io.TextIOWrapper = parsed_args.file
-    api.looting.import_json(f.read())
-    f.seek(0, 0)
-    print(f"Data ze souboru {f.name} byla načtena")
+def Command_Import(file_name: str = "main"):
+    with get_io_file(file_name) as f:
+        api.looting.import_json(f.read())
+    print(f"Data ze souboru '{file_name}' byla načtena")
 
 
 ##################################################
@@ -710,67 +740,92 @@ def Test6():
 ##################################################
 def main():
     global api
-    global parsed_args
-    parser = argparse.ArgumentParser(
-        description="Rádoby 'API' pro Bakaláře",
-        epilog="Ano, ano, ano... Actually je to web scraper, ale API zní líp :)",
-    )
-    parser.add_argument("url", help="URL na bakaláře (př. https://bakalari.skola.cz)")
-    parser.add_argument(metavar="jmeno", help="Přihlašovací jméno", dest="user")
-    parser.add_argument(metavar="heslo", help="Přihlašovací heslo", dest="password")
-    parser.add_argument(
-        "-b",
-        "--browser",
-        default="",
-        choices=[x.name.lower() for x in bakalariapi.Browser],
-        type=str.lower,  # => case-insensitive
-        help="Specifikuje WebDriver prohlížeče, který použít",
-    )
-    parser.add_argument(
-        "-e",
-        "--executablePath",
-        default=None,
-        help="Cesta ke spustitelnému webdriveru pro prohlížeč, který je specifikovaný pomocí '-b'",
-    )
-    parser.add_argument(
-        "-t",
-        "--test",
-        type=int,
-        default=-1,
-        help="Test, který se má spustit",
-        dest="test2run",
-        metavar="ID",
-    )
-    parser.add_argument(
-        "-a",
-        "--auto-run",
-        help="Pokud je tato flaga přítomna, spustí se automatické úlohy",
-        action="store_true",
-        dest="auto_run",
-        default=False,
-    )
-    parser.add_argument(
-        "-n",
-        "--no-init",
-        help="Pokud je tato flaga přítomna, nebude BakalariAPI instance automaticky inicializována",
-        action="store_true",
-        dest="no_init",
-        default=False,
-    )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        help="Zapne shell v 'ukecaném módu'. Lze opakovat pro větší 'ukecanost' (max 5).",
-        action="count",
-        default=0,
-    )
-    parser.add_argument(
-        "-f",
-        "--file",
-        type=argparse.FileType("r+", encoding="UTF-8"),
-        help="Soubor na čtení a zápis výsledků",
-    )
-    parsed_args = parser.parse_args()
+
+    def load_from_config() -> bool:
+        global args
+        if not os.path.exists(CONFIG_FILE_PATH):
+            return False
+        with open(CONFIG_FILE_PATH, "r") as f:
+            parsed = json.load(f)
+        args = Args(**parsed)
+        return True
+
+    def load_from_args():
+        global args
+        parser = argparse.ArgumentParser(
+            description="Rádoby 'API' pro Bakaláře",
+            epilog="Ano, ano, ano... Actually je to web scraper, ale API zní líp :)",
+        )
+        parser.add_argument(
+            "url", help="URL na bakaláře (př. https://bakalari.skola.cz)"
+        )
+        parser.add_argument(metavar="jmeno", help="Přihlašovací jméno", dest="username")
+        parser.add_argument(
+            metavar="heslo",
+            nargs="?",
+            help="Přihlašovací heslo; Pokud není tento argument přítomen, program se zeptá za běhu",
+            dest="password",
+            default=None,
+        )
+        parser.add_argument(
+            "-b",
+            "--browser",
+            default=None,
+            choices=[x.name.lower() for x in bakalariapi.Browser],
+            type=str.lower,  # => case-insensitive
+            help="Specifikuje WebDriver prohlížeče, který použít",
+        )
+        parser.add_argument(
+            "-e",
+            "--executablePath",
+            default=None,
+            help="Cesta ke spustitelnému webdriveru pro prohlížeč, který je specifikovaný pomocí '-b'",
+            dest="executable_path",
+        )
+        parser.add_argument(
+            "-t",
+            "--test",
+            type=int,
+            default=-1,
+            help="Test, který se má spustit",
+            # dest="test",
+            metavar="ID",
+        )
+        parser.add_argument(
+            "-a",
+            "--auto-run",
+            help="Pokud je tato flaga přítomna, spustí se automatické úlohy",
+            action="store_true",
+            dest="auto_run",
+            default=False,
+        )
+        parser.add_argument(
+            "-n",
+            "--no-init",
+            help="Pokud je tato flaga přítomna, nebude BakalariAPI instance automaticky inicializována",
+            action="store_true",
+            dest="no_init",
+            default=False,
+        )
+        parser.add_argument(
+            "-v",
+            "--verbose",
+            help="Zapne shell v 'ukecaném módu'. Lze opakovat pro větší 'ukecanost' (max 5).",
+            action="count",
+            default=0,
+        )
+        parsed = parser.parse_args()
+        args = Args(**vars(parsed))
+
+    if not (len(sys.argv) == 1 and load_from_config()):
+        load_from_args()
+
+    if args.password is None:
+        try:
+            args.password = getpass.getpass("Heslo: ")
+        except KeyboardInterrupt:
+            print("Heslo nebylo zadáno, předpokládá se prázdné heslo")
+            args.password = ""
 
     # Verbose:
     #   0 - Nic
@@ -779,7 +834,7 @@ def main():
     #   3 - Debug; Pouze BakalářiAPI
     #   4 - Info
     #   5 - NOSET
-    if parsed_args.verbose != 0:
+    if args.verbose != 0:
         logging.basicConfig(
             level=[
                 None,
@@ -788,16 +843,16 @@ def main():
                 "DEBUG",
                 "INFO",
                 "NOTSET",
-            ][parsed_args.verbose],
+            ][args.verbose],
             datefmt="[%X]",
             handlers=[RichHandler()],
         )
         logging.info(
             "Logging zapnut na levelu %s (%s)",
-            parsed_args.verbose,
+            args.verbose,
             logging.getLevelName(logging.root.level),
         )
-        if parsed_args.verbose < 4:
+        if args.verbose < 4:
             for logger in [
                 logging.getLogger(name) for name in logging.root.manager.loggerDict
             ]:
@@ -806,29 +861,28 @@ def main():
                 logger.propagate = False
             # logging.getLogger("bakalariapi").propagate = True
 
-    seleniumSettings: bakalariapi.SeleniumHandler | None = None
-    if parsed_args.browser != "":
-        seleniumSettings = bakalariapi.SeleniumHandler(
-            bakalariapi.Browser[parsed_args.browser.upper()],
-            parsed_args.executablePath,
+    selenium_handler: bakalariapi.SeleniumHandler | None = None
+    if args.browser is not None:
+        selenium_handler = bakalariapi.SeleniumHandler(
+            bakalariapi.Browser[args.browser.upper()],
+            args.executable_path,
         )
 
     api = bakalariapi.BakalariAPI(
-        parsed_args.url, parsed_args.user, parsed_args.password, seleniumSettings
+        args.url, args.username, args.password, selenium_handler
     )
 
-    if not parsed_args.no_init:
+    if not args.no_init:
         Init()
 
-    if parsed_args.test2run != -1:
-        RunTest(parsed_args.test2run)
+    if args.test != -1:
+        RunTest(args.test)
 
     prepare_shell()
-    shell_instance.PYTHON_EXEC_LOCALS = (
-        locals()
-    )  # Chceme *main* locals, ne *prepare_shell* locals
+    # Chceme `main()` locals, ne `prepare_shell()` locals
+    shell_instance.PYTHON_EXEC_LOCALS = locals()
 
-    if parsed_args.auto_run:
+    if args.auto_run:
         # Takže... Tohle bude, je a už i byl pain - dnes jsem na tom strávil celý den a pořád jsem to
         # nezprovoznil. V tuhle chvíli prohlašuji, že to nejde. Dle mého jsem zkusil vše - různě umístěný
         # patch_stdout, různě umístěný ProgressBar(), rozdílé místa, odkud se volají různé thready. Strávil
@@ -1025,7 +1079,7 @@ def prepare_shell():
         )
     )
     parser = shell.ShellArgumentParser()
-    parser.add_argument("id", help="ID testu, který se má spustit")
+    parser.add_argument("ID", help="ID testu, který se má spustit")
     shell_instance.add_command(
         shell.Command(
             "test",
@@ -1078,18 +1132,49 @@ def prepare_shell():
             spread_arguments=True,
         )
     )
-    shell_instance.add_command(
-        shell.Command(
-            "export", Command_Export, short_help="Exportuje data z daného souboru"
-        )
+    parser = shell.ShellArgumentParser()
+    parser.add_argument(
+        "file_name",
+        nargs="?",
+        help="ID/jméno exportu",
+        default="main",
+        metavar="ID",
     )
     shell_instance.add_command(
         shell.Command(
-            "import", Command_Import, short_help="Import data z daného souboru"
+            "export",
+            Command_Export,
+            argparser=parser,
+            short_help="Exportuje data z daného souboru",
+            spread_arguments=True,
+        )
+    )
+    parser = shell.ShellArgumentParser()
+    parser.add_argument(
+        "file_name",
+        nargs="?",
+        help="ID/jméno importu",
+        default="main",
+        metavar="ID",
+    )
+    shell_instance.add_command(
+        shell.Command(
+            "import",
+            Command_Import,
+            argparser=parser,
+            short_help="Importuje data z daného souboru",
+            spread_arguments=True,
         )
     )
     shell_instance.add_command(
-        shell.Command("init", Init, short_help="Provede (znovu) inicializaci")
+        shell.Command("init", Init, short_help="Provede (opětovnou) inicializaci")
+    )
+    shell_instance.add_command(
+        shell.Command(
+            "config",
+            save_config,
+            short_help="Uloží současnou konfiguraci do souboru, ze kterého se může při příštím spuštění (bez parametrů) konfigurace načíst",
+        )
     )
 
 

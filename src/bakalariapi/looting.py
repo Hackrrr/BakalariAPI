@@ -34,7 +34,6 @@ __all__ = [
 ]
 
 LOGGER = logging.getLogger("bakalariapi.looting")
-LOGGER_SERIALIZER = logging.getLogger("bakalariapi.looting.serializer")
 
 GetterOutputTypeVar = TypeVar("GetterOutputTypeVar", BeautifulSoup, dict)
 
@@ -124,7 +123,7 @@ class ResultSet:
 class Looting:
     """Třída obsatarávající sesbírané objekty pro pozdější použití.
 
-    Pro získání dat z Looting instance je zde metoda `.get()`
+    Pro získání dat z Looting instance je zde metoda `.get()`.
 
     Atributy:
         data:
@@ -134,48 +133,6 @@ class Looting:
             Slovník mají jako klíč název typu (string) a jako hodnotu slovík ID-UnresolvedID.
             Klíče ve "vnořených" slovnících jsou také (vždy) string.
     """
-
-    class JSONEncoder(json.JSONEncoder):
-        def default(self, o):
-            full_type_name = utils.get_full_type_name(type(o))
-            LOGGER_SERIALIZER.debug(
-                "Serializing object %s resolved to type %s", o, full_type_name
-            )
-            if isinstance(o, datetime):
-                LOGGER_SERIALIZER.debug(
-                    "... special handling (object seems like datetime instance)"
-                )
-                return {
-                    "_type": full_type_name,
-                    "data": o.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
-                }
-            if isinstance(o, utils.Serializable):
-                LOGGER_SERIALIZER.debug(
-                    "... special handling (object implemets utils.Serializable protocol)"
-                )
-                return {"_type": full_type_name, "data": o.serialize()}
-            return super().default(o)
-
-    class JSONDecoder(json.JSONDecoder):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, object_hook=self.hook, **kwargs)
-
-        def hook(self, o):
-            LOGGER_SERIALIZER.debug("Deserializing object %s", o)
-            if "_type" not in o:
-                return o
-            real_type = utils.resolve_string(o["_type"])
-            LOGGER_SERIALIZER.debug(
-                '... found "_type" value, resolved to %s', real_type
-            )
-            if real_type == datetime:
-                return datetime.strptime(o["data"], "%Y-%m-%dT%H:%M:%S.%fZ")
-            if issubclass(real_type, utils.Serializable):
-                LOGGER_SERIALIZER.debug(
-                    "... resolved type has implementation of utils.Serializable protocol, deserializing via this protocol"
-                )
-                return real_type.deserialize(o["data"])
-            raise TypeError("Unknown type to load; Type: " + o["_type"])
 
     def __init__(self):
         self.__lock = Lock()
@@ -225,9 +182,9 @@ class Looting:
         self.__lock.acquire()
         try:
             for lst in result_set.data.values():
+                # Jsem myslel, že to bude o trochu víc komplexnejší (jako třeba přeskočení resolvování typů) ale dopadlo to takhle KEKW
                 for o in lst:
                     self.__add_one(o)
-                # Jsem myslel, že to bude o trochu víc komplexnejší (jako třeba přeskočení resolvování typů) ale dopadlo to takhle KEKW
         finally:
             self.__lock.release()
 
@@ -273,13 +230,17 @@ class Looting:
                 "data": self.data,
                 "unresolved": self.unresolved,
             },
-            cls=self.JSONEncoder,
+            cls=utils.JSONSerializer,
             *args,
             **kwargs
         )
 
     def import_json(self, json_string: str, *args, **kwargs):
-        """Importuje JSON data."""
-        parsed = json.loads(json_string, cls=self.JSONDecoder, *args, **kwargs)
+        """Importuje JSON data.
+
+        Upozornění: Importovaní dat ze zdrojů, kterým nedůvěřujete, může být nebezpečné.
+        Ačkoli je snaha o co největší bezpečnost, existuje zde bezpečnostní riziko.
+        """
+        parsed = json.loads(json_string, cls=utils.JSONDeserializer, *args, **kwargs)
         self.data = parsed["data"]
         self.unresolved = parsed["unresolved"]

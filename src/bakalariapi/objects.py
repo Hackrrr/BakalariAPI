@@ -98,8 +98,14 @@ class BakalariObject(Serializable, ABC):
         self.ID = ID
 
     @abstractmethod
-    def format(self) -> str:
-        """Vrátí text vhodný pro zobrazení uživatelovi aplikace/BakalariAPI."""
+    def format(self, rich_colors: bool = False) -> str:
+        """Vrátí text vhodný pro zobrazení uživatelovi aplikace/BakalariAPI.
+
+        Args:
+            rich_colors:
+                Indikuje, zda ve výsledném textu mají být zahnuty "tagy" barev (pro `rich` modul).
+                Pokud `True`, "tagy" budou přítomny, jinak ne.
+        """
 
     def serialize(self) -> dict:
         return dict(self.__dict__)
@@ -132,7 +138,7 @@ class UnresolvedID(BakalariObject, Generic[BakalariObj]):
         super().__init__(ID)
         self.type: Type[BakalariObj] = type_
 
-    def format(self) -> str:
+    def format(self, rich_colors: bool = False) -> str:
         return f"Nevyřešené ID '{self.ID}'" + (
             "" if self.type is None else " typu {self.type}"
         )
@@ -174,7 +180,7 @@ class BakalariFile(BakalariObject):
         session.busy = False
         return output
 
-    def format(self) -> str:
+    def format(self, rich_colors: bool = False) -> str:
         return (
             f"ID: {self.ID}\n"
             f"Název souboru: {self.name}\n"
@@ -193,7 +199,7 @@ class KomensFile(BakalariFile):
         self.komensID: str = komensID
         self.path: str = path
 
-    def format(self) -> str:
+    def format(self, rich_colors: bool = False) -> str:
         return (
             f"ID: {self.ID}\n"
             f"Název souboru: {self.name}\n"
@@ -211,7 +217,7 @@ class HomeworkFile(BakalariFile):
         super().__init__(ID, name, 0, "")
         self.homeworkID: str = homeworkID
 
-    def format(self) -> str:
+    def format(self, rich_colors: bool = False) -> str:
         return (
             f"ID: {self.ID}\n"
             f"Název souboru: {self.name}\n"
@@ -248,12 +254,12 @@ class Komens(BakalariObject):
             bakalariAPI.get_endpoint(Endpoint.KOMENS_CONFIRM), json={"idmsg": self.ID}
         ).json()  # Jakože tohle jen jen ztráta výkonu... Actually to nemusíme vůbec parsovat...
 
-    def format(self) -> str:
+    def format(self, rich_colors: bool = False) -> str:
         return (
             f"ID: {self.ID}\n"
             f"Od: {self.sender}\n"
             f"Datum: {self.time.strftime('%d. %m. %Y, %H:%M')}\n"
-            f"Vyžaduje potvrzení? {'Ano' if self.need_confirm else 'Ne'}; Potvrzena? {'Ano' if self.confirmed else 'Ne'}\n"
+            f"{'[yellow]' if rich_colors and self.need_confirm and not self.confirmed else ''}Vyžaduje potvrzení? {'Ano' if self.need_confirm else 'Ne'}; Potvrzena? {'Ano' if self.confirmed else 'Ne'}{'[/yellow]' if rich_colors and self.need_confirm and not self.confirmed else ''}\n"
             f"Má soubory? {'Ano' if len(self.files) > 0 else 'Ne'}\n"
             "\n"
             f"{bs_get_text(BeautifulSoup(self.content, 'html.parser'))}"  # .get_text().strip()
@@ -289,7 +295,7 @@ class Grade(BakalariObject):
         self.order_in_class: str = order_in_class
         self.type: str = type_
 
-    def format(self):
+    def format(self, rich_colors: bool = False):
         return (
             f"ID: {self.ID}\n"
             f"Předmět: {self.subject}\n"
@@ -329,7 +335,9 @@ MeetingProvider(2, "Google", "Google Meet")
 
 
 class Meeting(BakalariObject):
-    """Třída/objekt držící informace o známkách/klasifikaci"""
+    """Třída/objekt držící informace o známkách/klasifikaci.
+
+    Datetime instance v této tříde jsou offset-aware."""
 
     def __init__(
         self,
@@ -360,18 +368,36 @@ class Meeting(BakalariObject):
 
     @property
     def owner_name(self) -> str:
-        """Jméno pořadatele schůzky"""
+        """Jméno pořadatele schůzky."""
         for participant in self.participants:
             if participant[0] == self.ownerID:
                 return participant[1]
         return ""
 
-    def format(self) -> str:
-        delta = self.start_time - datetime.now(timezone.utc).astimezone()
+    @property
+    def start_time_delta(self) -> timedelta:
+        """Vypočte timedeltu do začátku schůzky."""
+        return self.start_time - datetime.now(timezone.utc).astimezone()
+
+    @property
+    def is_before_start(self) -> bool:
+        return datetime.now(timezone.utc).astimezone() < self.start_time
+
+    def format(self, rich_colors: bool = False) -> str:
+        delta = self.start_time_delta
+        color = ""
+        if rich_colors:
+            is_before = self.is_before_start
+            if not is_before and delta <= timedelta(hours=1):
+                color = "red"
+            elif is_before and delta <= timedelta(minutes=5):
+                color = "yellow"
+            elif is_before and delta <= timedelta(minutes=30):
+                color = "green"
         return (
             f"ID: {self.ID}\n"
             f"Pořadatel: {self.owner_name}\n"
-            f"Začátek: {self.start_time.strftime('%H:%M, %d. %m. %Y')}{(' (' + cs_timedelta(delta, 'dhm') + ' do začátku)') if delta > timedelta(0) else (' (začíná nyní)' if delta == timedelta(0) else '')}\n"
+            f"Začátek: {('[' + color + ']') if rich_colors else ''}{self.start_time.strftime('%H:%M, %d. %m. %Y')}{(' (' + cs_timedelta(delta, 'dhm') + ' do začátku)') if delta > timedelta(0) else (' (začíná nyní)' if delta == timedelta(0) else '')}{('[/' + color + ']') if rich_colors else ''}\n"
             f"Konec:   {self.end_time.strftime('%H:%M, %d. %m. %Y')}\n"
             f"Poskytovatel schůzky: {self.provider.label}\n"
             f"URL na připojení: {self.join_url}\n"
@@ -428,7 +454,7 @@ class Homework(BakalariObject):
             },
         )
 
-    def format(self) -> str:
+    def format(self, rich_colors: bool = False) -> str:
         if len(self.files) > 0:
             soubory_text = ""
             count = 0
@@ -441,11 +467,13 @@ class Homework(BakalariObject):
             f"ID: {self.ID}\n"
             # Dále bych napsal něco jako:
             # {(' (do odevzdání zbývá ' + cs_timedelta(delta) + ')') if delta > timedelta(0) else ''}\n"
-            # To ale nelze, protože nemáme rok, tak nevíme, jestli jsme v negativu nabo v pozitivu
+            # plus bych k tomu přidal i barvičky...
+            # ... to ale nelze, protože nemáme rok, tak nevíme, jestli jsme v negativu nabo v pozitivu.
+            # Jasně, můžeme to odvodit, ale to dělat nechci.
             f"Datum odevzdaní: {self.submission_date.strftime('%d. %m. %Y')}\n"
             f"Datum zadání: {self.assignment_date.strftime('%d. %m. %Y')}\n"
             f"Předmět: {self.subject}\n"
-            f"Hotovo? {'Ano' if self.done else 'Ne'}\n"
+            f"Hotovo? {'Ano' if self.done else ('[yellow]Ne[/yellow]' if rich_colors else 'Ne') }\n"
             f"Soubory?\n{soubory_text}"
             "\n"
             f"{bs_get_text(BeautifulSoup(self.content, 'html.parser'))}"

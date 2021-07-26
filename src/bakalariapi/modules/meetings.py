@@ -69,7 +69,7 @@ def parser_meetings_overview_html(
             loot["Meetings"] = True
             meetings_json = json.loads(line.strip()[len("var meetingsData = ") : -1])
             for meeting in meetings_json:
-                output.add_loot(UnresolvedID(cast(str, meeting["Id"]), Meeting))
+                output.add_loot(UnresolvedID(str(meeting["Id"]), Meeting))
         elif line.startswith("model.Students = ko.mapping.fromJS("):
             loot["Students"] = True
             students_json = json.loads(
@@ -93,7 +93,7 @@ def parser_meetings_overview_html(
 def parser_meetings_overview_json(getter_output: GetterOutput[dict]) -> ResultSet:
     output = ResultSet()
     for meeting in getter_output.data["data"]["Meetings"]:
-        output.add_loot(UnresolvedID(cast(str, meeting["Id"]), Meeting))
+        output.add_loot(UnresolvedID(str(meeting["Id"]), Meeting))
     return output
 
 

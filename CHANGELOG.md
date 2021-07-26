@@ -3,6 +3,27 @@ Všechny důležité změny v tomto projektu budou zdokumentovány v tomto soubo
 
 Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) a podléhá [Sémantickému verzování](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Přidána závislost na balíček `appdirs` pro `bakalarishell`
+- Přidána možnost uložení konfigurace do souboru v user složce přes příkaz "config"
+- Barevné označený důležitých věcí v `bakalarishell`
+- Příkazy "export"/"import" v `bakalarishell`u nyní přijímají nepovinný poziční parametr "ID", který specifikuje ID/jméno exportovaných/importovaných dat
+
+### Changed
+- Definice `JSONEncoder` a `JSONDecoder` byly přesunuty z modulu `looting.Looting` do modulu `utils` a přejmenovány na `JSONSerializer` a `JSONDeserializer` a přesunuta a přejmenována i `logger` instance (z `bakalariapi.looting.serializer` na `bakalariapi.utils.serializer`)
+- Přidán nepovinný parametr `rich_colors` (defaultně `False`) u abstraktní třídy `objects.BakalariObject`, který všechny derivující třídy implementují a který indikuje, zda ve výsledném textu mají být přítomny "tagy" na barvy (pro `rich` modul)
+- `bakalarishell` nyní nevyžaduje heslo jako parametr při spouštění - pokud heslo není specifikováno přes poziční parametr při spuštění, uživatel bude dotázán za běhu (s vypnutím echem do terminálu)
+
+### Removed
+- Odstraněn parametr `-f`/`--file` pro `bakalarishell`, jelikož po zprovoznění nového systému importu/exportu již není za potřebý
+
+### Fixed
+- Opravany údaje o verzi v instalační konfiguraci a v `bakalariapi`
+- Opraven příkaz "test" v `bakalarishell`
+- Opravena deserializace offset-aware datetime instancí (časové údaje v `objects.Meeting`)
+
 ## [2.1.0] - 2021-06-26
 
 ### Added

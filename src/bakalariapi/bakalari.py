@@ -24,7 +24,6 @@ from bs4 import BeautifulSoup
 LOGGER = logging.getLogger("bakalariapi")
 LOGGER.addHandler(logging.NullHandler())
 
-__version__ = "2.0.0"
 __all__ = ["Endpoint", "BakalariAPI", "LAST_SUPPORTED_VERSION", "GetMode"]
 LAST_SUPPORTED_VERSION = "1.41.506.1"
 
@@ -316,12 +315,12 @@ class BakalariAPI:
 
         if not self.is_version_supported():
             warnings.warn(exceptions.VersionMismatchWarning())
-    
+
     def is_version_supported(self):
         """Zkontroluje, jestli `BakaláriAPI` podporuje verzi Bakalářů, která je na serveru.
 
         V současné chvíli pouze ověřuje, zda verze Bakalářů je shodná s `LAST_SUPPORTED_VERSION`.
-        
+
         Returns:
             Vrátí `True` pokud se shodují, jinak `False`.
             Pokud verze Bakalářů nebyla získána (tzn. je `None`), vrátí `False`.

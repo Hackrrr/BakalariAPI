@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import json
+import logging
 import sys
 from datetime import datetime, timedelta
-from typing import Any, Protocol, TypeVar, runtime_checkable
+from typing import Any, Protocol, TypeVar, cast, runtime_checkable
 
 from bs4 import Tag
-from typing import cast,
 from requests.cookies import RequestsCookieJar
 from selenium.webdriver.remote.webdriver import WebDriver
+
+LOGGER = logging.getLogger("bakalariapi.utils")
+LOGGER_SERIALIZER = logging.getLogger("bakalariapi.utils.serializer")
+
 
 T0 = TypeVar("T0")
 T1 = TypeVar("T1")
@@ -217,6 +222,50 @@ def resolve_string(string: str) -> Any:
 def get_full_type_name(t: type) -> str:
     """Vrátí celý název typu."""
     return f"{t.__module__}.{t.__name__}"
+
+
+# TODO: Merge?
+class JSONSerializer(json.JSONEncoder):
+    def default(self, o):
+        full_type_name = get_full_type_name(type(o))
+        LOGGER_SERIALIZER.debug(
+            "Serializing object %s resolved to type %s", o, full_type_name
+        )
+        if isinstance(o, datetime):
+            LOGGER_SERIALIZER.debug(
+                "... special handling (object seems like datetime instance)"
+            )
+            return {
+                "_type": full_type_name,
+                "data": o.isoformat(),
+            }
+        if isinstance(o, Serializable):
+            LOGGER_SERIALIZER.debug(
+                "... special handling (object implemets Serializable protocol)"
+            )
+            return {"_type": full_type_name, "data": o.serialize()}
+        return super().default(o)
+
+
+class JSONDeserializer(json.JSONDecoder):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, object_hook=self.hook, **kwargs)
+
+    def hook(self, o):
+        LOGGER_SERIALIZER.debug("Deserializing object %s", o)
+        if "_type" not in o:
+            return o
+        real_type = resolve_string(o["_type"])
+        LOGGER_SERIALIZER.debug('... found "_type" value, resolved to %s', real_type)
+        if real_type == datetime:
+            LOGGER_SERIALIZER.debug("... deserializing via special case")
+            return datetime.fromisoformat(o["data"])
+        if issubclass(real_type, Serializable):
+            LOGGER_SERIALIZER.debug(
+                "... resolved type has implementation of Serializable protocol, deserializing via this protocol"
+            )
+            return real_type.deserialize(o["data"])
+        raise TypeError("Unknown type to load; Type: " + o["_type"])
 
 
 def cookies_webdriver2requests(webdriver: WebDriver) -> dict[str, str]:
