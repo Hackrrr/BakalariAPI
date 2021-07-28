@@ -33,6 +33,14 @@ class MissingElementError(BakalariAPIError):
     """
 
 
+class PartialInitError(BakalariAPIError):
+    """Výjimka, která může nastat při určitých akcích, pokud `BakalariAPI` instance nebyla plně inicializována.
+
+    Tato výjimka by měla nastat pouze v případě, kdy `BakalariAPI.is_partial_init` je `True`.
+    Pokud výjimka nastane v přápadě, kdy  `BakalariAPI.is_partial_init` je `False`, jde o bug v `BakalářiAPI`.
+    """
+
+
 ### WARNING ###
 class VersionMismatchWarning(BakalariAPIWarning):
     """Výjimka, která nastane při neshodě verze Bakalářů a `LAST_SUPPORTED_VERSION`.

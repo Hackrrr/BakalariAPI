@@ -1,6 +1,4 @@
-"""Modul poskytující provizorní shellu
-V nejbližší době se bude pořádně refraktorovat (tzn. že se celý modul přepíše), takže ani dokumentaci psát teď nehodlám
-"""
+"""Modulární shell pro Python"""
 
 from __future__ import annotations
 
@@ -9,6 +7,7 @@ import contextlib
 import io
 import os
 import re
+import shlex
 import sys
 from enum import Enum, IntEnum
 from typing import Any, Callable, Iterable
@@ -583,7 +582,7 @@ class Shell:
         try:
             # with patch_stdout():
             while True:
-                if self._should_exit:  # If something requested exit, exit
+                if self._should_exit:
                     return
                 inpt = self._prompt()
                 if self._should_exit:

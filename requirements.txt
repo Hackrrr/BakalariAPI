@@ -1,3 +1,4 @@
+appdirs
 bs4
 prompt-toolkit
 requests

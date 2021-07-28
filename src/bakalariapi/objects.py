@@ -55,13 +55,13 @@ class ServerInfo:
 
     def __init__(
         self,
-        url: str,
-        bakalariVersion: str = "",
+        url: str | None = None,
+        bakalariVersion: str | None = None,
         bakalariVersionDate: datetime | None = None,
         bakalariEvidNumber: int | None = None,
     ):
-        self.url: str = url
-        self.version: str = bakalariVersion
+        self.url: str | None = url
+        self.version: str | None = bakalariVersion
         self.version_date: datetime | None = bakalariVersionDate
         self.evid_number: int | None = bakalariEvidNumber
 

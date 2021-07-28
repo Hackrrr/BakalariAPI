@@ -232,7 +232,7 @@ class Looting:
             },
             cls=utils.JSONSerializer,
             *args,
-            **kwargs
+            **kwargs,
         )
 
     def import_json(self, json_string: str, *args, **kwargs):

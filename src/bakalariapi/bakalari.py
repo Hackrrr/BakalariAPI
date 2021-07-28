@@ -16,7 +16,7 @@ import logging
 import warnings
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Callable, Type, overload
+from typing import Any, Callable, Type, overload, Literal
 
 import requests
 from bs4 import BeautifulSoup
@@ -214,17 +214,32 @@ class BakalariAPI:
             Instance classy UserInfo obsahující údaje o uživaleli.
         server_info:
             Instance classy ServerInfo obsahující údaje o serveru a Bakalářích.
+        is_partial_init:
+            Indikuje, zda je instance částečně nebo plně inicializována.
+            Je `True` pokud částečně, `False` pokud plně.
+            Pokud je `True`, tak je možnost
+
+    Pozn.:
+        "get" metody mohou při `GetMode.FRESH` a `GetMode.CACHED_OR_FRESH` mohou vyvolat výjimku `PartialInitError`, pokud není instance plně inicializována.
     """
+
+    @property
+    def is_partial_init(self) -> bool:
+        return (
+            self.server_info.url is None
+            or self.username is None
+            or self.password is None
+        )
 
     def __init__(
         self,
-        url: str,
-        username: str = "",
-        password: str = "",
+        url: str | None,
+        username: str | None = "",
+        password: str | None = "",
         seleniumHandler: seleniumhandler.SeleniumHandler | None = None,
     ):
-        self.username: str = username
-        self.password: str = password
+        self.username: str | None = username
+        self.password: str | None = password
         self.selenium_handler: seleniumhandler.SeleniumHandler | None = seleniumHandler
         self.session_manager: sessions.SessionManager = sessions.SessionManager(
             self, True
@@ -245,7 +260,12 @@ class BakalariAPI:
 
         Returns:
             Celou URL endpointu.
+
+        Raises:
+            PartialInitError: Pokud není známa URL serveru.
         """
+        if self.server_info.url is None:
+            raise exceptions.PartialInitError()
         return self.server_info.url + endpoint
 
     def kill(self, nice: bool = True):
@@ -265,7 +285,12 @@ class BakalariAPI:
 
         Returns:
             True pokud server/aplikace běží, False pokud neběží.
+
+        Raises:
+            PartialInitError: Pokud není známa URL serveru.
         """
+        if self.server_info.url is None:
+            raise exceptions.PartialInitError()
         try:
             response = requests.get(self.server_info.url)
             response.raise_for_status()
@@ -278,6 +303,9 @@ class BakalariAPI:
 
         Returns:
             True pokud jsou přihlašovací údaje správné, False pokud nejsou.
+
+        Raises:
+            PartialInitError: Pokud není plně instance inicializována.
         """
         session = self.session_manager.get_session_or_create(sessions.RequestsSession)
         output = session.login()
@@ -329,7 +357,7 @@ class BakalariAPI:
 
     # GRADES
     @overload
-    def get_grades(self, mode: GetMode.CACHED) -> list[Grade]:  # type: ignore
+    def get_grades(self, mode: Literal[GetMode.CACHED]) -> list[Grade]:
         """Načte a vrátí známky z vlastní looting instance.
 
         Returns:
@@ -337,7 +365,9 @@ class BakalariAPI:
         """
 
     @overload
-    def get_grades(self, mode: GetMode.FRESH, *, from_date: datetime | None = None) -> list[Grade]:  # type: ignore
+    def get_grades(
+        self, mode: Literal[GetMode.FRESH], *, from_date: datetime | None = None
+    ) -> list[Grade]:
         """Nově načte a vrátí známky.
 
         Args:
@@ -350,7 +380,12 @@ class BakalariAPI:
         """
 
     @overload
-    def get_grades(self, mode: GetMode.CACHED_OR_FRESH, *, from_date: datetime | None = None) -> list[Grade]:  # type: ignore
+    def get_grades(
+        self,
+        mode: Literal[GetMode.CACHED_OR_FRESH],
+        *,
+        from_date: datetime | None = None,
+    ) -> list[Grade]:
         """Načte a vrátí známky z vlastní looting instance. Pokud v looting instanci nejsou přítomny žádné známky, pokusí se načíst nové.
 
         Pokud jsou známky přítomny v looting instanci, argumenty této metody jsou nepodstatné.
@@ -369,6 +404,8 @@ class BakalariAPI:
         if mode == GetMode.CACHED:
             return self.looting.get(Grade)
         elif mode == GetMode.FRESH:
+            if self.is_partial_init:
+                raise exceptions.PartialInitError()
             return self._parse(modules.grades.getter(self, kwargs["from_date"])).get(
                 Grade
             )
@@ -390,7 +427,7 @@ class BakalariAPI:
 
     # HOMEWORKS
     @overload
-    def get_homeworks(self, mode: GetMode.CACHED) -> list[Homework]:  # type: ignore
+    def get_homeworks(self, mode: Literal[GetMode.CACHED]) -> list[Homework]:
         """Načte a vrátí úkoly z vlastní looting instance.
 
         Returns:
@@ -400,9 +437,9 @@ class BakalariAPI:
     @overload
     def get_homeworks(
         self,
-        mode: GetMode.FRESH,  # type: ignore
+        mode: Literal[GetMode.FRESH],
         *,
-        fast_mode: True,  # type: ignore
+        fast_mode: Literal[True],
     ) -> list[Homework]:
         """Nově načte a vrátí úkoly.
 
@@ -419,9 +456,9 @@ class BakalariAPI:
     @overload
     def get_homeworks(
         self,
-        mode: GetMode.FRESH,  # type: ignore
+        mode: Literal[GetMode.FRESH],
         *,
-        fast_mode: False,  # type: ignore
+        fast_mode: Literal[False],
         unfinished_only: bool = True,
         only_first_page: bool = False,
         first_loading_timeout: float = 5,
@@ -459,9 +496,9 @@ class BakalariAPI:
     @overload
     def get_homeworks(
         self,
-        mode: GetMode.CACHED_OR_FRESH,  # type: ignore
+        mode: Literal[GetMode.CACHED_OR_FRESH],
         *,
-        fast_mode: True,  # type: ignore
+        fast_mode: Literal[True],
     ) -> list[Homework]:
         """Načte a vrátí úkoly z vlastní looting instance. Pokud v looting instanci nejsou přítomny žádné úkoly, pokusí se načíst nové.
 
@@ -480,9 +517,9 @@ class BakalariAPI:
     @overload
     def get_homeworks(
         self,
-        mode: GetMode.CACHED_OR_FRESH,  # type: ignore
+        mode: Literal[GetMode.CACHED_OR_FRESH],
         *,
-        fast_mode: False,  # type: ignore
+        fast_mode: Literal[False],
         unfinished_only: bool = True,
         only_first_page: bool = False,
         first_loading_timeout: float = 5,
@@ -531,6 +568,8 @@ class BakalariAPI:
         if mode == GetMode.CACHED:
             return self.looting.get(Homework)
         elif mode == GetMode.FRESH:
+            if self.is_partial_init:
+                raise exceptions.PartialInitError()
             if kwargs["fast_mode"]:
                 return self._parse(modules.homeworks.getter_fast(self)).get(Homework)
             else:
@@ -565,7 +604,7 @@ class BakalariAPI:
 
     # MEETINGS
     @overload
-    def get_meetings(self, mode: GetMode.CACHED) -> list[Meeting]:  # type: ignore
+    def get_meetings(self, mode: Literal[GetMode.CACHED]) -> list[Meeting]:
         """Načte a vrátí schůzky z vlastní looting instance.
 
         Returns:
@@ -573,7 +612,7 @@ class BakalariAPI:
         """
 
     @overload
-    def get_meetings(self, mode: GetMode.FRESH) -> list[Meeting]:  # type: ignore
+    def get_meetings(self, mode: Literal[GetMode.FRESH]) -> list[Meeting]:
         """Nově načte a vrátí nadcházející schůzky.
 
         Returns:
@@ -581,7 +620,9 @@ class BakalariAPI:
         """
 
     @overload
-    def get_meetings(self, mode: GetMode.FRESH, *, from_date: datetime, to_date: datetime) -> list[Meeting]:  # type: ignore
+    def get_meetings(
+        self, mode: Literal[GetMode.FRESH], *, from_date: datetime, to_date: datetime
+    ) -> list[Meeting]:
         """Nově načte a vrátí schůzky.
 
         Je nutné specifikovat horní i dolní časovou hranici. Nejmenší možný čas je `datetime(1, 1, 1)`, největší možný je `datetime(9999, 12, 31, 23, 59, 59)`.
@@ -597,7 +638,7 @@ class BakalariAPI:
         """
 
     @overload
-    def get_meetings(self, mode: GetMode.CACHED_OR_FRESH) -> list[Meeting]:  # type: ignore
+    def get_meetings(self, mode: Literal[GetMode.CACHED_OR_FRESH]) -> list[Meeting]:
         """Načte a vrátí schůzky z vlastní looting instance. Pokud v looting instanci nejsou přítomny žádné schůzky, pokusí se načíst nové nadchézející schůzky.
 
         Returns:
@@ -605,7 +646,13 @@ class BakalariAPI:
         """
 
     @overload
-    def get_meetings(self, mode: GetMode.CACHED_OR_FRESH, *, from_date: datetime, to_date: datetime) -> list[Meeting]:  # type: ignore
+    def get_meetings(
+        self,
+        mode: Literal[GetMode.CACHED_OR_FRESH],
+        *,
+        from_date: datetime,
+        to_date: datetime,
+    ) -> list[Meeting]:
         """Načte a vrátí schůzky z vlastní looting instance. Pokud v looting instanci nejsou přítomny žádné schůzky, pokusí se načíst nové.
 
         Je nutné specifikovat horní i dolní časovou hranici. Nejmenší možný čas je `datetime(1, 1, 1)`, největší možný je `datetime(9999, 12, 31, 23, 59, 59)`.
@@ -625,6 +672,8 @@ class BakalariAPI:
         if mode == GetMode.CACHED:
             return self.looting.get(Meeting)
         elif mode == GetMode.FRESH:
+            if self.is_partial_init:
+                raise exceptions.PartialInitError()
             if "from_date" in kwargs:
                 return self._resolve(
                     self._parse(
@@ -663,7 +712,7 @@ class BakalariAPI:
 
     # STUDENTS
     @overload
-    def get_students(self, mode: GetMode.CACHED) -> list[Student]:  # type: ignore
+    def get_students(self, mode: Literal[GetMode.CACHED]) -> list[Student]:
         """Načte a vrátí studenty z vlastní looting instance.
 
         Returns:
@@ -671,7 +720,7 @@ class BakalariAPI:
         """
 
     @overload
-    def get_students(self, mode: GetMode.FRESH) -> list[Student]:  # type: ignore
+    def get_students(self, mode: Literal[GetMode.FRESH]) -> list[Student]:
         """Nově načte a vrátí seznam studentů.
 
         Returns:
@@ -679,7 +728,7 @@ class BakalariAPI:
         """
 
     @overload
-    def get_students(self, mode: GetMode.CACHED_OR_FRESH) -> list[Student]:  # type: ignore
+    def get_students(self, mode: Literal[GetMode.CACHED_OR_FRESH]) -> list[Student]:
         """Načte a vrátí studenty z vlastní looting instance. Pokud v looting instanci nejsou přítomny žádní studenti, pokusí se načíst nové.
 
         Returns:
@@ -690,6 +739,8 @@ class BakalariAPI:
         if mode == GetMode.CACHED:
             return self.looting.get(Student)
         elif mode == GetMode.FRESH:
+            if self.is_partial_init:
+                raise exceptions.PartialInitError()
             return self._parse(modules.meetings.getter_future_meetings_ids(self)).get(
                 Student
             )
@@ -703,7 +754,7 @@ class BakalariAPI:
 
     # KOMENS
     @overload
-    def get_komens(self, mode: GetMode.CACHED) -> list[Komens]:  # type: ignore
+    def get_komens(self, mode: Literal[GetMode.CACHED]) -> list[Komens]:
         """Načte a vrátí komens zprávy z vlastní looting instance.
 
         Returns:
@@ -713,7 +764,7 @@ class BakalariAPI:
     @overload
     def get_komens(
         self,
-        mode: GetMode.FRESH,  # type: ignore
+        mode: Literal[GetMode.FRESH],
         *,
         from_date: datetime | None = None,
         to_date: datetime | None = None,
@@ -744,7 +795,7 @@ class BakalariAPI:
     @overload
     def get_komens(
         self,
-        mode: GetMode.CACHED_OR_FRESH,  # type: ignore
+        mode: Literal[GetMode.CACHED_OR_FRESH],
         *,
         from_date: datetime | None = None,
         to_date: datetime | None = None,
@@ -778,6 +829,8 @@ class BakalariAPI:
         if mode == GetMode.CACHED:
             return self.looting.get(Komens)
         elif mode == GetMode.FRESH:
+            if self.is_partial_init:
+                raise exceptions.PartialInitError()
             return self._resolve(
                 self._parse(
                     modules.komens.getter_komens_ids(
@@ -843,7 +896,12 @@ class BakalariAPI:
 
         Returns:
             ResultSet, který obsahuje všechna data od jednotlivých resolverů.
+
+        Raises:
+            PartialInitError: Pokud není instance plně inicializována.
         """
+        if self.is_partial_init:
+            raise exceptions.PartialInitError()
         output = _resolve(unresolved, self, silence_querry_errors)
         self.looting.add_result_set(output)
         return output

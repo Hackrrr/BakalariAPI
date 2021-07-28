@@ -3,18 +3,22 @@ Všechny důležité změny v tomto projektu budou zdokumentovány v tomto soubo
 
 Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) a podléhá [Sémantickému verzování](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [Unreleased] ([3.0.0])
 
 ### Added
 - Přidána závislost na balíček `appdirs` pro `bakalarishell`
 - Přidána možnost uložení konfigurace do souboru v user složce přes příkaz "config"
-- Barevné označený důležitých věcí v `bakalarishell`
-- Příkazy "export"/"import" v `bakalarishell`u nyní přijímají nepovinný poziční parametr "ID", který specifikuje ID/jméno exportovaných/importovaných dat
+- Přidán příkaz "config" do `bakalarishell`, který umožňuje práci s konfigurací
+- Přidána výjimka `PartialInitError`
+- Přidán parametr `-d`/`--disable-config` pro `bakalarishell`, který zakazuje import uložené konfigurace
 
 ### Changed
 - Definice `JSONEncoder` a `JSONDecoder` byly přesunuty z modulu `looting.Looting` do modulu `utils` a přejmenovány na `JSONSerializer` a `JSONDeserializer` a přesunuta a přejmenována i `logger` instance (z `bakalariapi.looting.serializer` na `bakalariapi.utils.serializer`)
 - Přidán nepovinný parametr `rich_colors` (defaultně `False`) u abstraktní třídy `objects.BakalariObject`, který všechny derivující třídy implementují a který indikuje, zda ve výsledném textu mají být přítomny "tagy" na barvy (pro `rich` modul)
-- `bakalarishell` nyní nevyžaduje heslo jako parametr při spouštění - pokud heslo není specifikováno přes poziční parametr při spuštění, uživatel bude dotázán za běhu (s vypnutím echem do terminálu)
+- `bakalarishell` nyní nevyžaduje žádné parametry při spouštění - pokud potřebný argument (url/jméno/heslo) není specifikován při startu, uživatel bude dotázán za běhu
+- `BakalariAPI` lze nyní inicializovat i bez parametrů (resp. s parametry s hodnotou `None`) - v tom případě bude instance v "partial init" režimu, během kterého bude možno prověst jen určité akce, které nevyžadují k funkčnosti server (např. práce s uloženými daty); Pokud v tomto režimu bude vyžádána akce, kterou v tomto režimu provést nelze, vyvolá se výjimka `PartialInitError`
+- Příkazy "export"/"import" v `bakalarishell`u nyní přijímají nepovinný poziční parametr "ID", který specifikuje ID/jméno exportovaných/importovaných dat
+- Nyní je v `bakalarishell` plno barviček
 
 ### Removed
 - Odstraněn parametr `-f`/`--file` pro `bakalarishell`, jelikož po zprovoznění nového systému importu/exportu již není za potřebý
@@ -23,6 +27,7 @@ Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 - Opravany údaje o verzi v instalační konfiguraci a v `bakalariapi`
 - Opraven příkaz "test" v `bakalarishell`
 - Opravena deserializace offset-aware datetime instancí (časové údaje v `objects.Meeting`)
+- Konečně správný zápis typehintigu pro třídu `BakalariAPI` (za pomoci `typing.Literal`)
 
 ## [2.1.0] - 2021-06-26
 

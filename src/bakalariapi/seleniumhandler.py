@@ -1,5 +1,7 @@
 """Modul obsahující věci kolem Selenia."""
 
+from __future__ import annotations
+
 from enum import Enum
 
 from selenium import webdriver
@@ -22,9 +24,11 @@ class Browser(Enum):
 class SeleniumHandler:
     """Třída obsahujcí nastavení pro Selenium."""
 
-    def __init__(self, browser: Browser, executable_path: str = "", params: dict = {}):
+    def __init__(
+        self, browser: Browser, executable_path: str | None = None, params: dict = {}
+    ):
         self.browser: Browser = browser
-        self.executable_path: str = executable_path
+        self.executable_path: str | None = executable_path
         self.params: dict = params
 
     def open(self, try_silent: bool = True) -> WebDriver:
@@ -32,7 +36,7 @@ class SeleniumHandler:
         # try_silent = False # DEBUG LINE ONLY - SHOULD BE COMMENTED
         path = (
             {"executable_path": self.executable_path}
-            if self.executable_path != "" and self.executable_path is not None
+            if self.executable_path is not None
             else {}
         )
         if self.browser == Browser.CHROME:
