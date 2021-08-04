@@ -6,13 +6,12 @@ import argparse
 import contextlib
 import io
 import os
-import re
 import shlex
 import sys
 from enum import Enum, IntEnum
 from typing import Any, Callable, Iterable
 
-from rich import console, traceback
+from rich import console, traceback, print as rich_print
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
@@ -78,7 +77,7 @@ class Command:
         *,
         argparser: argparse.ArgumentParser = None,
         short_help: str = "",
-        aliases: list[str] = [],
+        aliases: list[str] | None = None,
         spread_arguments: bool = True,
     ):
         self.name: str = name
@@ -88,7 +87,7 @@ class Command:
         self.argparser.prog = name
         self.callback = callback  # Passing dict with values from Argparser
         self.short_help: str = short_help
-        self.aliases: list[str] = aliases
+        self.aliases: list[str] = [] if aliases is None else aliases
         self.SPREAD_ARGUMENTS: bool = spread_arguments
 
         if self.argparser.description is None:
@@ -186,15 +185,11 @@ class ShellPredefinedCommands(Enum):
 
 
 class Shell:
-    Regex: re.Pattern = re.compile(
-        r"(?<=\s)(?:((?:(?<!\\)\".+?(?<!\\)\")|(?:(?<!\\)'.+?(?<!\\)'))|((?:.(?<!\s))+?))(?=\s|$)"
-    )
-
     def __init__(
         self,
         *,
         prompt: str = "> ",
-        commands: list[Command] = [],
+        commands: list[Command] | None = None,
         predefined_commands: list[ShellPredefinedCommands] = [
             x for x in ShellPredefinedCommands
         ],
@@ -202,8 +197,8 @@ class Shell:
         allow_shorhands: bool = True,
         allow_python_exec: bool = False,
         python_exec_prefix: str = None,
-        python_exec_globals: dict[str, Any] = {},
-        python_exec_locals: dict[str, Any] = {},
+        python_exec_globals: dict[str, Any] | None = None,
+        python_exec_locals: dict[str, Any] | None = None,
         end_on_ctrlc: bool = True,
         raise_on_ctrlc: bool = False,
         command_exception_traceback: bool = True,
@@ -213,8 +208,9 @@ class Shell:
         history_suggestions: bool = True,
         autocomplete: bool = True,
         completely_disable_bell: bool = True,
-        enable_copy: bool = True,
-        enable_paste: bool = True,
+        enable_copy: bool = True,  # TODO: Make this work
+        enable_paste: bool = True,  # TODO: Make this work,
+        rich_prompt: bool = False,
     ):
         self.prompt: str = prompt
         self.commands: dict[CommandEntryPriority, dict[str, CommandEntry]] = {
@@ -225,8 +221,12 @@ class Shell:
         self.ALLOW_SHORTHANDS: bool = allow_shorhands
         self.ALLOW_PYTHON_EXEC: bool = allow_python_exec
         self.PYTHON_EXEC_PREFIX: str | None = python_exec_prefix
-        self.PYTHON_EXEC_GLOBALS: dict[str, Any] = python_exec_globals
-        self.PYTHON_EXEC_LOCALS: dict[str, Any] = python_exec_locals
+        self.PYTHON_EXEC_GLOBALS: dict[str, Any] = (
+            {} if python_exec_globals is None else python_exec_globals
+        )
+        self.PYTHON_EXEC_LOCALS: dict[str, Any] = (
+            {} if python_exec_locals is None else python_exec_locals
+        )
         self.END_ON_CTRL_C: bool = end_on_ctrlc
         self.RAISE_ON_CTRL_C: bool = raise_on_ctrlc
         self.COMMAND_EXCEPTION_TRACEBACK: bool = command_exception_traceback
@@ -234,9 +234,10 @@ class Shell:
             command_exception_traceback_locals
         )
         self.COMMAND_EXCEPTION_RERAISE: bool = command_exception_reraise
+        self.RICH_PROMPT: bool = rich_prompt
 
         if completely_disable_bell:
-            # promt_toolkit je super, ale někdo dostal skvělý nápad implementovat v základu zvuk bez možnosti vypnutí...
+            # `prompt_toolkit` je super, ale někdo dostal skvělý nápad implementovat v základu zvuk bez možnosti vypnutí...
             # Tím pádem si ho vypneme sami :)
             setattr(Vt100_Output, "bell", lambda _: None)
             # Pozn.: Ono to jde vypnout asi i nějak "normálně" (resp. normálněji), ale to se mi nechce řešit.
@@ -263,8 +264,9 @@ class Shell:
         self._should_exit: bool = False
         self._running: bool = False
 
-        for command in commands:
-            self.add_command(command)
+        if commands is not None:
+            for command in commands:
+                self.add_command(command)
 
         for predefined_command in predefined_commands:
             if predefined_command == ShellPredefinedCommands.EXIT:
@@ -404,110 +406,114 @@ class Shell:
             return
         # ... jinak jdeme dál
 
-        parsed = self.parse_line(inpt)
+        parsed = self.parse_line(inpt, True)
         if len(parsed) == 0:
             return
 
-        candidates: list[CandidateMatch] = []
-        # Stačí nám porovnávat jen první slovo/část, jelikož zbytek případně obstarává argparse
-        first_word = parsed.pop(0)
-        if not self.FIRST_COMMAND_CASE_SENSITIVE:
-            first_word = first_word.lower()
+        # `parse_line` vrací list[list[str]], protože podporuje ";" a tím pádem můžeme mít více příkazů v jednom
+        for parsed_line in parsed:
+            candidates: list[CandidateMatch] = []
+            # Stačí nám porovnávat jen první slovo/část, jelikož zbytek případně obstarává argparse
+            first_word = parsed_line.pop(0)
+            if not self.FIRST_COMMAND_CASE_SENSITIVE:
+                first_word = first_word.lower()
 
-        # Najdeme kandidáty
-        if self.ALLOW_SHORTHANDS:
-            first_word_length = len(first_word)
-            for entries_priority, entries_by_priority in self.commands.items():
-                for command_name, command_entry in entries_by_priority.items():
-                    if command_name.startswith(first_word):
-                        if first_word_length == len(command_name):
-                            candidates.append(
-                                CandidateMatch(
-                                    command_entry.command,
-                                    CandidateMatchPriority.FULL
-                                    if entries_priority == CommandEntryPriority.BASE
-                                    else CandidateMatchPriority.FULL_ALIAS,
-                                    command_name,
+            # Nejdříve najdeme kandidáty
+            if self.ALLOW_SHORTHANDS:
+                first_word_length = len(first_word)
+                for entries_priority, entries_by_priority in self.commands.items():
+                    for command_name, command_entry in entries_by_priority.items():
+                        if command_name.startswith(first_word):
+                            if first_word_length == len(command_name):
+                                candidates.append(
+                                    CandidateMatch(
+                                        command_entry.command,
+                                        CandidateMatchPriority.FULL
+                                        if entries_priority == CommandEntryPriority.BASE
+                                        else CandidateMatchPriority.FULL_ALIAS,
+                                        command_name,
+                                    )
                                 )
-                            )
-                            break
-                        else:
-                            candidates.append(
-                                CandidateMatch(
-                                    command_entry.command,
-                                    CandidateMatchPriority.SHORTHAND
-                                    if entries_priority == CommandEntryPriority.BASE
-                                    else CandidateMatchPriority.SHORTHAND_ALIAS,
-                                    command_name,
+                                break
+                            else:
+                                candidates.append(
+                                    CandidateMatch(
+                                        command_entry.command,
+                                        CandidateMatchPriority.SHORTHAND
+                                        if entries_priority == CommandEntryPriority.BASE
+                                        else CandidateMatchPriority.SHORTHAND_ALIAS,
+                                        command_name,
+                                    )
                                 )
-                            )
-                        # Nemůžeme, protože chceme vyskočit, když nastane FULL match, což s tímhle syntaxem nelze
-                        # candidates.append(CommandMatchCandidate(
-                        #     command_entry.command,
-                        #     (
-                        #         CandidateMatchPriority.FULL
-                        #         if entries_priority == CommandEntryPriority.BASE
-                        #         else CandidateMatchPriority.FULL_ALIAS
-                        #     ) if first_word_length == len(command_name) else (
-                        #         CandidateMatchPriority.SHORTHAND
-                        #         if entries_priority == CommandEntryPriority.BASE
-                        #         else CandidateMatchPriority.SHORTHAND_ALIAS
-                        #     ),
-                        #     command_name
-                        # ))
-        else:
-            for entries_priority, entries_by_priority in self.commands.items():
-                if first_word in entries_by_priority:
-                    candidates.append(
-                        CandidateMatch(
-                            entries_by_priority[first_word].command,
-                            CandidateMatchPriority.FULL
-                            if entries_priority == CommandEntryPriority.BASE
-                            else CandidateMatchPriority.FULL_ALIAS,
-                            first_word,
-                        )
-                    )
-                    break
-
-        # A zpracujeme možné kandidáty
-        candidates_length = len(candidates)
-        if candidates_length == 0:
-            if self.ALLOW_PYTHON_EXEC and self.PYTHON_EXEC_PREFIX is None:
-                self.__python_exec(inpt)
+                            # Nemůžeme, protože chceme vyskočit, když nastane FULL match, což s tímhle syntaxem nelze
+                            # candidates.append(CommandMatchCandidate(
+                            #     command_entry.command,
+                            #     (
+                            #         CandidateMatchPriority.FULL
+                            #         if entries_priority == CommandEntryPriority.BASE
+                            #         else CandidateMatchPriority.FULL_ALIAS
+                            #     ) if first_word_length == len(command_name) else (
+                            #         CandidateMatchPriority.SHORTHAND
+                            #         if entries_priority == CommandEntryPriority.BASE
+                            #         else CandidateMatchPriority.SHORTHAND_ALIAS
+                            #     ),
+                            #     command_name
+                            # ))
             else:
-                print(
-                    f"Neznámý příkaz '{inpt}'\nMůžeš zkusit napsat 'help' nebo '?' pro nápovědu"
-                )
-        elif candidates_length == 1:
-            candidates[0].command(parsed, candidates[0].named_as)
-        else:
-            candidates_by_priority: dict[
-                CandidateMatchPriority, list[CandidateMatch]
-            ] = {x: [] for x in [y for y in CandidateMatchPriority]}
-            for candidate in candidates:
-                candidates_by_priority[candidate.priority].append(candidate)
-            for candidate_priority, candidate_set in candidates_by_priority.items():
-                set_length = len(candidate_set)
-                if set_length == 0:
-                    continue
-                else:
-                    if set_length == 1:
-                        candidate_set[0].command(parsed, candidate_set[0].named_as)
-                    else:
-                        candidate_level = {
-                            CandidateMatchPriority.FULL: "plná shoda",
-                            CandidateMatchPriority.FULL_ALIAS: "plná shoda aliasu",
-                            CandidateMatchPriority.SHORTHAND: "počáteční shoda",
-                            CandidateMatchPriority.SHORTHAND_ALIAS: "počáteční shoda aliasu",
-                        }[candidate_priority]
-                        print(f"Nejednoznačný příkaz: (úroveň: {candidate_level})")
-                        for candidate in candidate_set:
-                            print(
-                                "%-20s %s"
-                                % (candidate.named_as, candidate.command.short_help)
+                for entries_priority, entries_by_priority in self.commands.items():
+                    if first_word in entries_by_priority:
+                        candidates.append(
+                            CandidateMatch(
+                                entries_by_priority[first_word].command,
+                                CandidateMatchPriority.FULL
+                                if entries_priority == CommandEntryPriority.BASE
+                                else CandidateMatchPriority.FULL_ALIAS,
+                                first_word,
                             )
-                    break
-            # Pokud se kód dostane do této větve, tak vždy nějakého kandidáta máme, tudíž zde nemusíme mít (další) zprávu o neznámém příkazu
+                        )
+                        break
+
+            # A následně kandidáty zpracujeme
+            candidates_length = len(candidates)
+            if candidates_length == 0:
+                if self.ALLOW_PYTHON_EXEC and self.PYTHON_EXEC_PREFIX is None:
+                    self.__python_exec(inpt)
+                else:
+                    print(
+                        f"Neznámý příkaz '{inpt}'\nMůžeš zkusit napsat 'help' nebo '?' pro nápovědu"
+                    )
+            elif candidates_length == 1:
+                candidates[0].command(parsed_line, candidates[0].named_as)
+            else:
+                candidates_by_priority: dict[
+                    CandidateMatchPriority, list[CandidateMatch]
+                ] = {x: [] for x in [y for y in CandidateMatchPriority]}
+                for candidate in candidates:
+                    candidates_by_priority[candidate.priority].append(candidate)
+                for candidate_priority, candidate_set in candidates_by_priority.items():
+                    set_length = len(candidate_set)
+                    if set_length == 0:
+                        continue
+                    else:
+                        if set_length == 1:
+                            candidate_set[0].command(
+                                parsed_line, candidate_set[0].named_as
+                            )
+                        else:
+                            candidate_level = {
+                                CandidateMatchPriority.FULL: "plná shoda",
+                                CandidateMatchPriority.FULL_ALIAS: "plná shoda aliasu",
+                                CandidateMatchPriority.SHORTHAND: "počáteční shoda",
+                                CandidateMatchPriority.SHORTHAND_ALIAS: "počáteční shoda aliasu",
+                            }[candidate_priority]
+                            print(f"Nejednoznačný příkaz: (úroveň: {candidate_level})")
+                            for candidate in candidate_set:
+                                print(
+                                    "%-20s %s"
+                                    % (candidate.named_as, candidate.command.short_help)
+                                )
+                        break
+                # Pokud se kód dostane do této větve, tak vždy nějakého kandidáta máme, tudíž zde nemusíme mít (další) zprávu o neznámém příkazu
 
     def print_help(self):
         print("Možné příkazy:")
@@ -597,7 +603,7 @@ class Shell:
                             t = traceback.Traceback(
                                 show_locals=self.COMMAND_EXCEPTION_TRACEBACK_LOCALS
                             )
-                            t.trace.stacks[0].frames = t.trace.stacks[0].frames[3:]
+                            t.trace.stacks[0].frames = t.trace.stacks[0].frames[2:]
                             c.print(t)
 
                         if self.COMMAND_EXCEPTION_RERAISE:
@@ -612,24 +618,44 @@ class Shell:
             self._should_exit = False
 
     def _prompt(self) -> str:
-        return self._promt_session.prompt(self.prompt)
+        if self.RICH_PROMPT:
+            rich_print(self.prompt, end="")
+            return self._promt_session.prompt()
+        else:
+            return self._promt_session.prompt(self.prompt)
 
     def stop_loop(self):
         self._should_exit = True
 
-    def parse_line(self, line: str) -> list[str]:
-        parsed = []
-        # Mezera před stringem, protože python regex engine nepodporuje anchor na začátek v look-behind (resp. variabilní délku look-behind(u))
-        regex_split = self.Regex.findall(" " + line)
-        for part in regex_split:
-            parsed.append(part[1] if part[0] == "" else part[0][1:-1])
-        return parsed
+    def parse_line(self, line: str, filter_empty: bool) -> list[list[str]]:
+        output: list[list[str]] = [[]]
+        for part in shlex.split(line):
+            chunks = part.split(";")
+            if len(chunks) == 1:
+                output[-1].append(part)
+            else:
+                # chunk0;chunk1;chunk2;...;chunkX
+                # ["chunk0", "chunk1", "chunk2", ..., "chunkX"]
+                # "chunk0" patří k přechozímu příkazu,
+                # "chunk1", "chunk2", ... jsou (celé) samostané příkazy,
+                # "chunkX" je začátek následující příkazu, který může pokračovat v dalším partu
+                output[-1].append(chunks[0])
+                # `filter`, protože nechceme prázdný stringy pokud se bude parsovat tohle: ";;;;;;;;;"
+                output += list(
+                    filter(lambda x: x != "", map(lambda x: [x], chunks[1:-1]))
+                )
+                output.append([chunks[-1]])
+        if filter_empty:
+            output = list(filter(lambda x: len(x) != 0, output))
+        return output
 
     def __python_exec(self, inpt: str):
         print(python_exec(inpt, self.PYTHON_EXEC_GLOBALS, self.PYTHON_EXEC_LOCALS))
 
 
-def python_exec(string: str, globals_={}, locals_={}) -> str:
+def python_exec(
+    string: str, globals_: dict[str, Any] | None, locals_: dict[str, Any] | None
+) -> str:
     try:
         out = io.StringIO()
         with contextlib.redirect_stdout(out):

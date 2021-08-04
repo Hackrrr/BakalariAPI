@@ -14,7 +14,7 @@ import time
 import traceback
 import warnings
 import webbrowser
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Callable, cast, Any
 
@@ -69,6 +69,8 @@ class Args:
     auto_run: bool = False
     no_init: bool = False
     disable_config: bool = False
+
+    commands: list[str] = field(default_factory=list)
 
 
 args: Args
@@ -911,7 +913,7 @@ def main():
     parser.add_argument(
         "-v",
         "--verbose",
-        help="Zapne shell v 'ukecaném módu'. Lze opakovat pro větší 'ukecanost' (max 5).",
+        help="Zapne shell v 'ukecaném módu'; Lze opakovat vícekrát pro větší 'ukecanost' (max 5).",
         action="count",
         default=None,
     )
@@ -921,6 +923,13 @@ def main():
         help="Soubor s konfigurací se bude ignorovat, tudíž se brát v potaz pouze argumenty z příkazové řádky",
         action="store_true",
         dest="disable_config",
+        default=None,
+    )
+    parser.add_argument(
+        "-c",
+        "--command",
+        help="Vykoná daný příkaz po zapnutí shellu (po autorunu); Lze opakovat vícekrát",
+        action="append",
         default=None,
     )
     # Všechny argumenty pro argparse MUSÍ mít "default=None", jinak se neprofiltrují
@@ -1108,6 +1117,12 @@ def main():
 
     print()
     print("Shell aktivní")
+
+    if len(args.commands) != 0:
+        print("Vykonávám zadané příkazy...")
+        for command in args.commands:
+            print(command)
+            shell_instance.proc_string(command)
 
     try:
         shell_instance.loop()

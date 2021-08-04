@@ -11,6 +11,8 @@ Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 - Přidán příkaz "config" do `bakalarishell`, který umožňuje práci s konfigurací
 - Přidána výjimka `PartialInitError`
 - Přidán parametr `-d`/`--disable-config` pro `bakalarishell`, který zakazuje import uložené konfigurace
+- Přidán parametr `-c`/`--command` pro `bakalarishell`, kterým lze spustit příkazy po startu
+- Přidán parametr `rich_prompt` do `bakalarishell.shell.Shell`, kterým lze formátovat `.prompt` přes `rich` modul
 
 ### Changed
 - Definice `JSONEncoder` a `JSONDecoder` byly přesunuty z modulu `looting.Looting` do modulu `utils` a přejmenovány na `JSONSerializer` a `JSONDeserializer` a přesunuta a přejmenována i `logger` instance (z `bakalariapi.looting.serializer` na `bakalariapi.utils.serializer`)
@@ -19,6 +21,9 @@ Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 - `BakalariAPI` lze nyní inicializovat i bez parametrů (resp. s parametry s hodnotou `None`) - v tom případě bude instance v "partial init" režimu, během kterého bude možno prověst jen určité akce, které nevyžadují k funkčnosti server (např. práce s uloženými daty); Pokud v tomto režimu bude vyžádána akce, kterou v tomto režimu provést nelze, vyvolá se výjimka `PartialInitError`
 - Příkazy "export"/"import" v `bakalarishell`u nyní přijímají nepovinný poziční parametr "ID", který specifikuje ID/jméno exportovaných/importovaných dat
 - Nyní je v `bakalarishell` plno barviček
+- `bakalarishell` nyní podporuje více příkazů v jednom oddělených pomocí ";"
+- `bakalarishell.shell.Shell` nyní parsuje příkaz pomocí `shlex` namísto vlastního regexu
+- Parametry `globals_` a `locals_` u `bakalarishell.shell.pyhton_exec` jsou nyní povinné
 
 ### Removed
 - Odstraněn parametr `-f`/`--file` pro `bakalarishell`, jelikož po zprovoznění nového systému importu/exportu již není za potřebý
@@ -28,6 +33,7 @@ Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 - Opraven příkaz "test" v `bakalarishell`
 - Opravena deserializace offset-aware datetime instancí (časové údaje v `objects.Meeting`)
 - Konečně správný zápis typehintigu pro třídu `BakalariAPI` (za pomoci `typing.Literal`)
+- Opraveny defaultní mutující hodnoty
 
 ## [2.1.0] - 2021-06-26
 

@@ -25,11 +25,14 @@ class SeleniumHandler:
     """Třída obsahujcí nastavení pro Selenium."""
 
     def __init__(
-        self, browser: Browser, executable_path: str | None = None, params: dict = {}
+        self,
+        browser: Browser,
+        executable_path: str | None = None,
+        params: dict | None = None,
     ):
         self.browser: Browser = browser
         self.executable_path: str | None = executable_path
-        self.params: dict = params
+        self.params: dict = {} if params is None else params
 
     def open(self, try_silent: bool = True) -> WebDriver:
         """Spustí a vrátí WebDriver instanci"""

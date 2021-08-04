@@ -431,7 +431,7 @@ class Homework(BakalariObject):
         content: str,
         assignment_date: datetime,
         done: bool,
-        files: list[HomeworkFile] = [],
+        files: list[HomeworkFile] | None = None,
     ):
         super().__init__(ID)
         # Pozn.: Data u homework objektů májí správně pouze den a měsíc, jelikož nebyl zjištěn způsob,
@@ -441,7 +441,7 @@ class Homework(BakalariObject):
         self.content: str = content
         self.assignment_date: datetime = assignment_date
         self.done: bool = done
-        self.files: list[HomeworkFile] = files
+        self.files: list[HomeworkFile] = [] if files is None else files
 
     def mark_as_done(self, bakalariAPI: BakalariAPI, value: bool = True):
         """Označí úkol jako hotový"""
