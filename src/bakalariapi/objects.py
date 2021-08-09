@@ -175,9 +175,10 @@ class BakalariFile(BakalariObject):
             Soubor se totiž bufferuje celý a hrozí riziko zaplnění paměti.
             Ideální cesta je napsat vlastní metodu, která bude soubor stahovat po částech a rovnou někam ukládat.
         """
-        session = bakalariAPI.session_manager.get_session_or_create(RequestsSession)
-        output = session.get(self.get_download_url(bakalariAPI)).content
-        session.busy = False
+        with bakalariAPI.session_manager.get_session_or_create(
+            RequestsSession
+        ) as session:
+            output = session.get(self.get_download_url(bakalariAPI)).content
         return output
 
     def format(self, rich_colors: bool = False) -> str:

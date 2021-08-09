@@ -182,6 +182,20 @@ def _resolve(
             output.add_loot(o)
     return output
 
+def is_version_supported(version: str):
+    """Zkontroluje, jestli `BakaláriAPI` podporuje danou verzi Bakalářů.
+
+    V současné chvíli pouze ověřuje, zda verze Bakalářů je shodná s `LAST_SUPPORTED_VERSION`.
+
+    Args:
+        version:
+            Verze, která se má zkontrolovat.
+
+    Returns:
+        Vrátí `True` pokud se shodují, jinak `False`.
+    """
+    return version == LAST_SUPPORTED_VERSION
+
 
 class GetMode(Enum):
     """Enum určující mód při získávání dat.
@@ -307,13 +321,14 @@ class BakalariAPI:
         Raises:
             PartialInitError: Pokud není plně instance inicializována.
         """
-        session = self.session_manager.get_session_or_create(sessions.RequestsSession)
-        output = session.login()
-        if not output:
-            session.kill()
-            self.session_manager.unregister_session(session)
-        else:
-            session.busy = False
+        with self.session_manager.get_session_or_create(
+            sessions.RequestsSession
+        ) as session:
+            output = session.login()
+            # Pokud login není validní, potřebujeme se sessionu zbavit => zabít ho a odstranit z session manageru
+            if not output:
+                session.kill()
+                self.session_manager.unregister_session(session)
         return output
 
     def init(self):
@@ -321,16 +336,16 @@ class BakalariAPI:
 
         Volání této metody není nutné, avšak zatím není (implementován) jiný způsob, jak tyto informace získat.
         """
-        session = self.session_manager.get_session_or_create(sessions.RequestsSession)
-
-        getter_output = looting.GetterOutput(
-            Endpoint.USER_INFO,
-            BeautifulSoup(
-                session.get(self.get_endpoint(Endpoint.USER_INFO)).content,
-                "html.parser",
-            ),
-        )
-        session.busy = False
+        with self.session_manager.get_session_or_create(
+            sessions.RequestsSession
+        ) as session:
+            getter_output = looting.GetterOutput(
+                Endpoint.USER_INFO,
+                BeautifulSoup(
+                    session.get(self.get_endpoint(Endpoint.USER_INFO)).content,
+                    "html.parser",
+                ),
+            )
         self._parse(getter_output)
 
         # Možná by se mohl registrovat parser
@@ -353,7 +368,7 @@ class BakalariAPI:
             Vrátí `True` pokud se shodují, jinak `False`.
             Pokud verze Bakalářů nebyla získána (tzn. je `None`), vrátí `False`.
         """
-        return self.server_info.version == LAST_SUPPORTED_VERSION
+        return False if self.server_info.version is None else is_version_supported(self.server_info.version)
 
     # GRADES
     @overload

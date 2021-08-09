@@ -109,6 +109,13 @@ class BakalariSession(ABC):
         """
         self._auto_extend = False
 
+    def __enter__(self: Session) -> Session:
+        self.busy = True
+        return self
+
+    def __exit__(self):
+        self.busy = False
+
 
 class RequestsSession(BakalariSession):
     """Session využívající `requests` modul."""
@@ -120,9 +127,8 @@ class RequestsSession(BakalariSession):
         super().__init__(bakalariAPI, setBusy, login)
 
     def extend(self):
-        self.busy = True
-        self.session.get(self.bakalariAPI.get_endpoint(Endpoint.SESSION_EXTEND))
-        self.busy = False
+        with self:
+            self.session.get(self.bakalariAPI.get_endpoint(Endpoint.SESSION_EXTEND))
 
     def kill(self, nice=True):
         if nice:
@@ -131,32 +137,29 @@ class RequestsSession(BakalariSession):
         super().kill(nice)
 
     def get_session_info(self) -> dict:
-        self.busy = True
-        output = self.session.get(
-            self.bakalariAPI.get_endpoint(Endpoint.SESSION_INFO)
-        ).json()
-        self.busy = False
+        with self:
+            output = self.session.get(
+                self.bakalariAPI.get_endpoint(Endpoint.SESSION_INFO)
+            ).json()
         return output
 
     def login(self) -> bool:
-        self.busy = True
-        output = self.session.post(
-            self.bakalariAPI.get_endpoint(Endpoint.LOGIN),
-            {
-                "username": self.bakalariAPI.username,
-                "password": self.bakalariAPI.password,
-            },
-            allow_redirects=False,
-        ).is_redirect
-        self.busy = False
+        with self:
+            output = self.session.post(
+                self.bakalariAPI.get_endpoint(Endpoint.LOGIN),
+                {
+                    "username": self.bakalariAPI.username,
+                    "password": self.bakalariAPI.password,
+                },
+                allow_redirects=False,
+            ).is_redirect
         return output
 
     def is_logged(self) -> bool:
-        self.busy = True
-        response = self.session.get(
-            self.bakalariAPI.get_endpoint(Endpoint.DASHBOARD), allow_redirects=False
-        )
-        self.busy = False
+        with self:
+            response = self.session.get(
+                self.bakalariAPI.get_endpoint(Endpoint.DASHBOARD), allow_redirects=False
+            )
         return not response.is_redirect
 
     def get(self, *args, **kwargs) -> requests.Response:
@@ -191,10 +194,9 @@ class SeleniumSession(BakalariSession):
                 cookies=utils.cookies_webdriver2requests(self.session),
             ).json()
         else:
-            self.busy = True
-            self.session.get(self.bakalariAPI.get_endpoint(Endpoint.SESSION_INFO))
-            output = json.loads(self.session.page_source)
-            self.busy = False
+            with self:
+                self.session.get(self.bakalariAPI.get_endpoint(Endpoint.SESSION_INFO))
+                output = json.loads(self.session.page_source)
             return output
 
     def extend(self):
@@ -204,9 +206,8 @@ class SeleniumSession(BakalariSession):
                 cookies=utils.cookies_webdriver2requests(self.session),
             )
         else:
-            self.busy = True
-            self.session.get(self.bakalariAPI.get_endpoint(Endpoint.SESSION_EXTEND))
-            self.busy = False
+            with self:
+                self.session.get(self.bakalariAPI.get_endpoint(Endpoint.SESSION_EXTEND))
 
     def kill(self, nice=True):
         # try:
@@ -229,33 +230,31 @@ class SeleniumSession(BakalariSession):
                 allow_redirects=False,
             )
             if output.is_redirect:
-                self.busy = True
-                cookies = utils.cookies_requests2webdriver(output.cookies)
+                with self:
+                    cookies = utils.cookies_requests2webdriver(output.cookies)
 
-                # Musíme být na správné stránce, jelikož jinak se nám vrátí error o špatné doméně,
-                # kterou si to případně domyslí, když je na dané stránce I guess a asi není nejlepší
-                # řešení dávat doménu "na tvrdo" (domain = bakalariAPI.url), takže to je (zatím) takto
-                self.session.get(self.bakalariAPI.get_endpoint(Endpoint.LOGIN))
-                for cookie in cookies:
-                    self.session.add_cookie(cookie)
-                self.busy = False
+                    # Musíme být na správné stránce, jelikož jinak se nám vrátí error o špatné doméně,
+                    # kterou si to případně domyslí, když je na dané stránce I guess a asi není nejlepší
+                    # řešení dávat doménu "na tvrdo" (domain = bakalariAPI.url), takže to je (zatím) takto
+                    self.session.get(self.bakalariAPI.get_endpoint(Endpoint.LOGIN))
+                    for cookie in cookies:
+                        self.session.add_cookie(cookie)
                 return True
             else:
                 return False
         else:
-            self.busy = True
-            self.session.get(self.bakalariAPI.get_endpoint(Endpoint.LOGIN))
-            self.session.find_element_by_id("username").send_keys(
-                self.bakalariAPI.username
-            )
-            self.session.find_element_by_id("password").send_keys(
-                self.bakalariAPI.password
-            )
-            self.session.find_element_by_id("loginButton").click()
-            output = self.session.current_url != self.bakalariAPI.get_endpoint(
-                Endpoint.LOGIN
-            )
-            self.busy = False
+            with self:
+                self.session.get(self.bakalariAPI.get_endpoint(Endpoint.LOGIN))
+                self.session.find_element_by_id("username").send_keys(
+                    self.bakalariAPI.username
+                )
+                self.session.find_element_by_id("password").send_keys(
+                    self.bakalariAPI.password
+                )
+                self.session.find_element_by_id("loginButton").click()
+                output = self.session.current_url != self.bakalariAPI.get_endpoint(
+                    Endpoint.LOGIN
+                )
             return output
 
     def is_logged(self) -> bool:
@@ -267,12 +266,11 @@ class SeleniumSession(BakalariSession):
             )
             return not response.is_redirect
         else:
-            self.busy = True
-            self.session.get(self.bakalariAPI.get_endpoint(Endpoint.DASHBOARD))
-            output = self.session.current_url == self.bakalariAPI.get_endpoint(
-                Endpoint.DASHBOARD
-            )
-            self.busy = False
+            with self:
+                self.session.get(self.bakalariAPI.get_endpoint(Endpoint.DASHBOARD))
+                output = self.session.current_url == self.bakalariAPI.get_endpoint(
+                    Endpoint.DASHBOARD
+                )
             return output
 
 

@@ -661,42 +661,40 @@ def RunTest(ID: int):
 
 def Test0():
     print("Spouštím testování...")
-    session = api.session_manager.get_session_or_create(
+    with api.session_manager.get_session_or_create(
         bakalariapi.sessions.RequestsSession
-    )
-    try:
-        while True:
-            last = session.get(
-                api.get_endpoint(bakalariapi.bakalari.Endpoint.SESSION_INFO)
-            ).json()["data"]["remainingTime"]
-            print("\r", end="")
+    ) as session:
+        try:
             while True:
-                print(
-                    "Současný zbývající čas: " + str(last) + " " * 20, end="\r"
-                )  # Some spaces to rewrite previous text...
-                session.get(
-                    api.get_endpoint(bakalariapi.bakalari.Endpoint.SESSION_EXTEND)
-                )
-                current = float(
+                last = session.get(
+                    api.get_endpoint(bakalariapi.bakalari.Endpoint.SESSION_INFO)
+                ).json()["data"]["remainingTime"]
+                print("\r", end="")
+                while True:
+                    print(
+                        "Současný zbývající čas: " + str(last) + " " * 20, end="\r"
+                    )  # Some spaces to rewrite previous text...
                     session.get(
-                        api.get_endpoint(bakalariapi.bakalari.Endpoint.SESSION_INFO)
-                    ).json()["data"]["remainingTime"]
+                        api.get_endpoint(bakalariapi.bakalari.Endpoint.SESSION_EXTEND)
+                    )
+                    current = float(
+                        session.get(
+                            api.get_endpoint(bakalariapi.bakalari.Endpoint.SESSION_INFO)
+                        ).json()["data"]["remainingTime"]
+                    )
+                    if last < current:
+                        print("\n")
+                        break
+                    last = current
+                    time.sleep(1)
+                print(
+                    "Sezení bylo prodlouženo, když zbývalo "
+                    + str(last)
+                    + " (+ max 1s) do konce a bylo prodlouženo na "
+                    + str(current)
                 )
-                if last < current:
-                    print("\n")
-                    break
-                last = current
-                time.sleep(1)
-            print(
-                "Sezení bylo prodlouženo, když zbývalo "
-                + str(last)
-                + " (+ max 1s) do konce a bylo prodlouženo na "
-                + str(current)
-            )
-    except KeyboardInterrupt:
-        print("Testování ukončeno")
-    finally:
-        session.busy = False
+        except KeyboardInterrupt:
+            print("Testování ukončeno")
 
 
 def Test1():

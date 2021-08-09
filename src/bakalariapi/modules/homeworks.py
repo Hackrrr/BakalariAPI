@@ -20,9 +20,8 @@ LOGGER = logging.getLogger("bakalariapi.modules.homeworks")
 
 def getter_fast(bakalariAPI: BakalariAPI) -> GetterOutput[BeautifulSoup]:
     """Získá pouze prvních 20 nehotových aktivních úkolů, ale je mnohem rychlejší než ostatní metody na získání úkolů."""
-    session = bakalariAPI.session_manager.get_session_or_create(RequestsSession, True)
-    response = session.get(bakalariAPI.get_endpoint(Endpoint.HOMEWORKS))
-    session.busy = False
+    with bakalariAPI.session_manager.get_session_or_create(RequestsSession) as session:
+        response = session.get(bakalariAPI.get_endpoint(Endpoint.HOMEWORKS))
     return GetterOutput(
         Endpoint.HOMEWORKS, BeautifulSoup(response.content, "html.parser")
     )
@@ -39,67 +38,65 @@ def get_slow(
 
     # TODO: Page size param
 
-    session = bakalariAPI.session_manager.get_session_or_create(SeleniumSession, True)
-    session.session.get(bakalariAPI.get_endpoint(Endpoint.HOMEWORKS))
-    output = ResultSet()
+    with bakalariAPI.session_manager.get_session_or_create(SeleniumSession) as session:
+        session.session.get(bakalariAPI.get_endpoint(Endpoint.HOMEWORKS))
+        output = ResultSet()
 
-    if not unfinished_only:
-        session.session.find_element_by_xpath(
-            "//span[span/input[@id='cphmain_cbUnfinishedHomeworks_S']]"
-        ).click()
-        # Proč jsem musel šáhnout po XPath? Protože Bakaláři :) Input, podle kterého to můžeme najít, tak je schovaný...
-        # A jeho parrent taky... A protože je to schovaný, tak s tím nemůžeme iteragovat... Takže potřebujeme parrenta
-        # parrenta toho inputu, který už vidět je a můžeme na něj kliknout. Prostě super :)
+        if not unfinished_only:
+            session.session.find_element_by_xpath(
+                "//span[span/input[@id='cphmain_cbUnfinishedHomeworks_S']]"
+            ).click()
+            # Proč jsem musel šáhnout po XPath? Protože Bakaláři :) Input, podle kterého to můžeme najít, tak je schovaný...
+            # A jeho parrent taky... A protože je to schovaný, tak s tím nemůžeme iteragovat... Takže potřebujeme parrenta
+            # parrenta toho inputu, který už vidět je a můžeme na něj kliknout. Prostě super :)
 
-    checkID = ""
+        checkID = ""
 
-    while True:
-        source = session.session.page_source
-        temp_result = parser(
-            GetterOutput(Endpoint.HOMEWORKS, BeautifulSoup(source, "html.parser"))
-        )
+        while True:
+            source = session.session.page_source
+            temp_result = parser(
+                GetterOutput(Endpoint.HOMEWORKS, BeautifulSoup(source, "html.parser"))
+            )
 
-        if temp_result.get(Homework)[0].ID == checkID:  # Náš "fail check"
-            # Očividně tedy selhalo pozorovnání loading obrazovky a parsujeme stejnou stránku dvakrát, takže cyklus ukončujeme
-            # Jen tak mimochodem... toto taky znamená, že Bakaláři jsou zase bugnutý a stránka se neposunula i přesto, že další stránka exististuje
-            # (nebo jsme selhali my s detekování existence další stánky, o čemž ale dost pochybuji)
-            break
+            if temp_result.get(Homework)[0].ID == checkID:  # Náš "fail check"
+                # Očividně tedy selhalo pozorovnání loading obrazovky a parsujeme stejnou stránku dvakrát, takže cyklus ukončujeme
+                # Jen tak mimochodem... toto taky znamená, že Bakaláři jsou zase bugnutý a stránka se neposunula i přesto, že další stránka exististuje
+                # (nebo jsme selhali my s detekování existence další stánky, o čemž ale dost pochybuji)
+                break
 
-        output.merge(temp_result)
+            output.merge(temp_result)
 
-        if not only_first_page:
-            try:
-                el = session.session.find_element_by_xpath(
-                    "//a[@id='grdukoly_DXPagerBottom_PBN']"
-                )
-            except NoSuchElementException:
-                break  # Jsme na poslední stránce
-            el.click()
-            try:
-                WebDriverWait(session.session, first_loading_timeout, 0.1).until(
-                    SeleniumConditions.visibility_of_element_located(
-                        (By.ID, "grdukoly_LPV")
+            if not only_first_page:
+                try:
+                    el = session.session.find_element_by_xpath(
+                        "//a[@id='grdukoly_DXPagerBottom_PBN']"
                     )
-                )
-            except TimeoutException:
-                # Je možný, že načítání bylo rychlejší než náš 0.1 s check na loading screen, takže jdeme rovnou parsovat další stránku
-                # Tuto "chybu" kdyžtak zachytíme naším "fail checkem", který případně cyklus ukončí
-                continue
-            try:
-                WebDriverWait(session.session, second_loading_timeout).until_not(
-                    SeleniumConditions.visibility_of_element_located(
-                        (By.ID, "grdukoly_LPV")
+                except NoSuchElementException:
+                    break  # Jsme na poslední stránce
+                el.click()
+                try:
+                    WebDriverWait(session.session, first_loading_timeout, 0.1).until(
+                        SeleniumConditions.visibility_of_element_located(
+                            (By.ID, "grdukoly_LPV")
+                        )
                     )
-                )
-            except TimeoutException:
-                LOGGER.info(
-                    "Probrally stuck in infinity loop while loading homeworks, ending homework getter"
-                )
-                break  # Pravděpodobně nějaký infinity loading od Bakalářů, se kterým mi nic dělat nemůžeme eShrug
-        else:
-            break
-
-    session.busy = False
+                except TimeoutException:
+                    # Je možný, že načítání bylo rychlejší než náš 0.1 s check na loading screen, takže jdeme rovnou parsovat další stránku
+                    # Tuto "chybu" kdyžtak zachytíme naším "fail checkem", který případně cyklus ukončí
+                    continue
+                try:
+                    WebDriverWait(session.session, second_loading_timeout).until_not(
+                        SeleniumConditions.visibility_of_element_located(
+                            (By.ID, "grdukoly_LPV")
+                        )
+                    )
+                except TimeoutException:
+                    LOGGER.info(
+                        "Probrally stuck in infinity loop while loading homeworks, ending homework getter"
+                    )
+                    break  # Pravděpodobně nějaký infinity loading od Bakalářů, se kterým mi nic dělat nemůžeme eShrug
+            else:
+                break
     return output
 
 

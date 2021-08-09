@@ -6,10 +6,11 @@ Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 ## [Unreleased] ([3.0.0])
 
 ### Added
-- Přidána závislost na balíček `appdirs` pro `bakalarishell`
-- Přidána možnost uložení konfigurace do souboru v user složce přes příkaz "config"
-- Přidán příkaz "config" do `bakalarishell`, který umožňuje práci s konfigurací
+- Přidána podpora kontextový manažerů pro sessiony - pokud se session použije jakožto kontextový manažer (`with` keyword), automaticky se při vnoření do kontextru nastaví `busy` flag a při opuštění kontextu se vymaže
+- Vytvořena funkce `bakalari.is_version_supported()` a metoda `BakalariAPI.is_version_supported()`, které kontrolují, zda je daná verze Bakalářů podporována
 - Přidána výjimka `PartialInitError`
+- Přidána závislost na balíček `appdirs` pro `bakalarishell`
+- Přidán příkaz "config" do `bakalarishell`, který umožňuje práci s konfigurací (uložení, zobrazení, smazání)
 - Přidán parametr `-d`/`--disable-config` pro `bakalarishell`, který zakazuje import uložené konfigurace
 - Přidán parametr `-c`/`--command` pro `bakalarishell`, kterým lze spustit příkazy po startu
 - Přidán parametr `rich_prompt` do `bakalarishell.shell.Shell`, kterým lze formátovat `.prompt` přes `rich` modul
@@ -26,6 +27,7 @@ Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 - Parametry `globals_` a `locals_` u `bakalarishell.shell.pyhton_exec` jsou nyní povinné
 
 ### Removed
+- Odstraněn "přímý" export `bakalariapi.LAST_SUPPORTED_VERSION`, jelikož již není potřeba pro běžné užití (avšak stále je přístupný skrz `bakalariapi.bakalari.LAST_SUPPORTED_VERSION`)
 - Odstraněn parametr `-f`/`--file` pro `bakalarishell`, jelikož po zprovoznění nového systému importu/exportu již není za potřebý
 
 ### Fixed

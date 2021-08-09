@@ -15,17 +15,17 @@ from ..utils import line_iterator
 
 def getter_meeting(bakalariAPI: BakalariAPI, ID: str) -> GetterOutput[dict]:
     """Získá schůzku s daným ID."""
-    session = bakalariAPI.session_manager.get_session_or_create(RequestsSession, True)
-    response = session.get(bakalariAPI.get_endpoint(Endpoint.MEETINGS_INFO) + ID).json()
-    session.busy = False
+    with bakalariAPI.session_manager.get_session_or_create(RequestsSession) as session:
+        response = session.get(
+            bakalariAPI.get_endpoint(Endpoint.MEETINGS_INFO) + ID
+        ).json()
     return GetterOutput(Endpoint.MEETINGS_INFO, response)
 
 
 def getter_future_meetings_ids(bakalariAPI: BakalariAPI) -> GetterOutput[BeautifulSoup]:
     """Získá IDčka budoucích schůzek."""
-    session = bakalariAPI.session_manager.get_session_or_create(RequestsSession, True)
-    response = session.get(bakalariAPI.get_endpoint(Endpoint.MEETINGS_OVERVIEW))
-    session.busy = False
+    with bakalariAPI.session_manager.get_session_or_create(RequestsSession) as session:
+        response = session.get(bakalariAPI.get_endpoint(Endpoint.MEETINGS_OVERVIEW))
     return GetterOutput(
         Endpoint.MEETINGS_OVERVIEW, BeautifulSoup(response.content, "html.parser")
     )
@@ -35,17 +35,16 @@ def getter_meetings_ids(
     bakalariAPI: BakalariAPI, from_date: datetime, to_date: datetime
 ) -> GetterOutput[dict]:
     """Získá IDčka daných schůzek."""
-    session = bakalariAPI.session_manager.get_session_or_create(RequestsSession, True)
-    response = session.post(
-        bakalariAPI.get_endpoint(Endpoint.MEETINGS_OVERVIEW),
-        {
-            "TimeWindow": "FromTo",
-            "FilterByAuthor": "AllInvitations",
-            "MeetingFrom": from_date.strftime("%Y-%m-%dT%H:%M:%S") + "+00:00",
-            "MeetingTo": to_date.strftime("%Y-%m-%dT%H:%M:%S") + "+00:00",
-        },
-    ).json()
-    session.busy = False
+    with bakalariAPI.session_manager.get_session_or_create(RequestsSession) as session:
+        response = session.post(
+            bakalariAPI.get_endpoint(Endpoint.MEETINGS_OVERVIEW),
+            {
+                "TimeWindow": "FromTo",
+                "FilterByAuthor": "AllInvitations",
+                "MeetingFrom": from_date.strftime("%Y-%m-%dT%H:%M:%S") + "+00:00",
+                "MeetingTo": to_date.strftime("%Y-%m-%dT%H:%M:%S") + "+00:00",
+            },
+        ).json()
     return GetterOutput(Endpoint.MEETINGS_OVERVIEW, response)
 
 

@@ -18,7 +18,7 @@ if not api.is_server_running():
 elif not api.is_login_valid():
     raise Exception("Nesprávné přihlašovací údaje")
 ```
-Samozřejmě pokud jsi si jistý/jistá, že je vše správně, tak tyto metody volat nemusíš a ušetřit tím trochu času. Reálně toho času zase až tak moc neušetříš, jelikož sessiony se "recyklují" a použijí znova, aby se nemusel pro každou operaci vytvářet inicializovat nový session.
+Samozřejmě pokud jsi si jistý/jistá, že je vše správně, tak tyto metody volat nemusíš a ušetřit tím trochu času avšak reálně toho času zase až tak moc neušetříš, jelikož sessiony se "recyklují" a použijí znova, aby se nemusel pro každou operaci vytvářet inicializovat nový session.
 
 Další (potencionálně chtěný) krok je `.init()` metoda. Ta získá některé informace o serveru (`bakalariapi.ServerInfo`) a uživatelovi (`bakalariapi.UserInfo`). Pokud tyto informace vědět nepotřebuješ, tak s `.init()` metodou nemusíš ztrácet čas.
 ```py
@@ -26,7 +26,7 @@ api.init() # Tato metoda nic nevrací ...
 print(api.user_info.hash) # ... ale ukládá data do UserInfo instance pod atributem "user_info" ...
 print(api.server_info.version) # ... a do ServerInfo instance pod atributem "server_info"
 
-if api.server_info.version != bakalariapi.LAST_SUPPORTED_VERSION:
+if not api.is_version_supported(): # Metoda, která ověřuje kompatibilitu BakalářiAPI
     print("Jiná verze Bakalářů, některé funkce nemusí fungovat správně")
 ```
 Doporučuji ale `.init()` volat, jelikož pak lze ověřit reálnou verzi Bakalářů oproti verzi Bakalářů v `bakalariapi`. Ačkoli pravděpodobně vše bude fungovat, je stejně lepší někde v aplikaci oznámit, že se mohou vyskytnout určité deviace.

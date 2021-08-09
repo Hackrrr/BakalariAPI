@@ -15,16 +15,15 @@ def getter(
     bakalariAPI: BakalariAPI, from_date: datetime = None
 ) -> GetterOutput[BeautifulSoup]:
     """Získá dané známky."""
-    session = bakalariAPI.session_manager.get_session_or_create(RequestsSession)
-    response = session.get(
-        bakalariAPI.get_endpoint(Endpoint.GRADES)
-        + (
-            ""
-            if from_date is None
-            else f"?dfrom={from_date.strftime('%Y%m%d')}0000&subt=obdobi"
+    with bakalariAPI.session_manager.get_session_or_create(RequestsSession) as session:
+        response = session.get(
+            bakalariAPI.get_endpoint(Endpoint.GRADES)
+            + (
+                ""
+                if from_date is None
+                else f"?dfrom={from_date.strftime('%Y%m%d')}0000&subt=obdobi"
+            )
         )
-    )
-    session.busy = False
     return GetterOutput(Endpoint.GRADES, BeautifulSoup(response.content, "html.parser"))
 
 

@@ -27,21 +27,19 @@ def getter_komens_ids(
         if to_date is not None:
             target += "&to=" + to_date.strftime("%d%m%Y")
 
-    session = bakalariAPI.session_manager.get_session_or_create(RequestsSession)
-    response = session.get(target)
-    session.busy = False
+    with bakalariAPI.session_manager.get_session_or_create(RequestsSession) as session:
+        response = session.get(target)
     return GetterOutput(Endpoint.KOMENS, BeautifulSoup(response.content, "html.parser"))
 
 
 def getter_info(
     bakalariAPI: BakalariAPI, ID: str, context: str = "prijate"
 ) -> GetterOutput[dict]:
-    session = bakalariAPI.session_manager.get_session_or_create(RequestsSession)
-    response = session.post(
-        bakalariAPI.get_endpoint(Endpoint.KOMENS_GET),
-        json={"idmsg": ID, "context": context},
-    ).json()
-    session.busy = False
+    with bakalariAPI.session_manager.get_session_or_create(RequestsSession) as session:
+        response = session.post(
+            bakalariAPI.get_endpoint(Endpoint.KOMENS_GET),
+            json={"idmsg": ID, "context": context},
+        ).json()
     return GetterOutput(Endpoint.KOMENS_GET, response)
 
 
