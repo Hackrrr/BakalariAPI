@@ -118,13 +118,12 @@ class ShellCompleter(Completer):
     def get_completions(
         self, document: Document, complete_event: CompleteEvent
     ) -> Iterable[Completion]:
+        prev_word_pos = document.find_previous_word_beginning()
+        if (prev_word_pos is None and document.cursor_position != 0) or (
+            prev_word_pos is not None and document.cursor_position + prev_word_pos != 0
+        ):
+            return []
         for priority, entries_by_priority in self.shell.commands.items():
-            prev_word_pos = document.find_previous_word_beginning()
-            if (prev_word_pos is None and document.cursor_position != 0) or (
-                prev_word_pos is not None
-                and document.cursor_position + prev_word_pos != 0
-            ):
-                return []
             for entry in entries_by_priority:
                 if entry.startswith(document.text):
                     yield Completion(
@@ -210,7 +209,7 @@ class Shell:
         completely_disable_bell: bool = True,
         enable_copy: bool = True,  # TODO: Make this work
         enable_paste: bool = True,  # TODO: Make this work,
-        rich_prompt: bool = False,
+        # rich_prompt: bool = False,
     ):
         self.prompt: str = prompt
         self.commands: dict[CommandEntryPriority, dict[str, CommandEntry]] = {
@@ -234,7 +233,7 @@ class Shell:
             command_exception_traceback_locals
         )
         self.COMMAND_EXCEPTION_RERAISE: bool = command_exception_reraise
-        self.RICH_PROMPT: bool = rich_prompt
+        # self.RICH_PROMPT: bool = rich_prompt
 
         if completely_disable_bell:
             # `prompt_toolkit` je super, ale někdo dostal skvělý nápad implementovat v základu zvuk bez možnosti vypnutí...
@@ -258,7 +257,8 @@ class Shell:
             history=None if history else DummyHistory(),
             auto_suggest=AutoSuggestFromHistory() if history_suggestions else None,
             completer=ShellCompleter(self) if autocomplete else None,
-            # complete_while_typing=False
+            complete_while_typing=False,
+            # reserve_space_for_menu=0
         )
 
         self._should_exit: bool = False
@@ -284,13 +284,13 @@ class Shell:
                 )
             elif predefined_command == ShellPredefinedCommands.PROMPT:
                 parser = ShellArgumentParser()
-                parser.add_argument("text", help="Nový prompt text")
+                parser.add_argument("text", help="Nový prompt", nargs="?", default=None)
                 self.add_command(
                     Command(
                         "prompt",
-                        self.change_prompt,
+                        self.__prompt_command_hanlder,
                         argparser=parser,
-                        short_help="Změní prompt text",
+                        short_help="Změní nebo zobrazí prompt",
                         spread_arguments=True,
                     )
                 )
@@ -392,6 +392,73 @@ class Shell:
             self.commands[priority] = {
                 k: v for k, v in sorted(self.commands[priority].items())
             }
+
+    def start_loop(self):
+        self._sort_commands()
+        self._running = True
+        try:
+            # with patch_stdout():
+            while True:
+                if self._should_exit:
+                    return
+                inpt = self._prompt()
+                if self._should_exit:
+                    # If something requested exit but we are alredy asked user for input, exit here to prevent executing next command
+                    return
+                if inpt != "":
+                    try:
+                        self.proc_string(inpt)
+                    except Exception as e:
+                        if self.COMMAND_EXCEPTION_TRACEBACK:
+                            c = console.Console()
+                            t = traceback.Traceback(
+                                show_locals=self.COMMAND_EXCEPTION_TRACEBACK_LOCALS
+                            )
+                            t.trace.stacks[0].frames = t.trace.stacks[0].frames[2:]
+                            c.print(t)
+
+                        if self.COMMAND_EXCEPTION_RERAISE:
+                            raise e
+        except KeyboardInterrupt as keyboard_interrupt:
+            if self.END_ON_CTRL_C:
+                self._should_exit = True
+            if self.RAISE_ON_CTRL_C:
+                raise keyboard_interrupt
+        finally:
+            self._running = False
+            self._should_exit = False
+
+    def stop_loop(self):
+        self._should_exit = True
+
+    def _prompt(self) -> str:
+        # if self.RICH_PROMPT:
+        #     rich_print(self.prompt, end="")
+        #     return self._promt_session.prompt()
+        # else:
+        return self._promt_session.prompt(self.prompt)
+
+    def parse_line(self, line: str, filter_empty: bool) -> list[list[str]]:
+        output: list[list[str]] = [[]]
+        for part in shlex.split(line):
+            chunks = part.split(";")
+            if len(chunks) == 1:
+                output[-1].append(part)
+            else:
+                # chunk0;chunk1;chunk2;...;chunkX
+                # ["chunk0", "chunk1", "chunk2", ..., "chunkX"]
+                # "chunk0" patří k přechozímu příkazu,
+                # "chunk1", "chunk2", ... jsou (celé) samostané příkazy,
+                # "chunkX" je začátek následující příkazu, který může pokračovat v dalším partu
+                output[-1].append(chunks[0])
+                # `filter`, protože nechceme prázdný stringy pokud se bude parsovat tohle: ";;;;;;;;;"
+                output += list(
+                    filter(lambda x: x != "", map(lambda x: [x], chunks[1:-1]))
+                )
+                output.append([chunks[-1]])
+        if filter_empty:
+            output = list(filter(lambda x: len(x) != 0, output))
+        return output
 
     def proc_string(self, inpt: str):
 
@@ -582,72 +649,11 @@ class Shell:
         else:
             raise Exception("Neznámý příkaz, který záhadným způsobem prošel validací")
 
-    def loop(self):
-        self._sort_commands()
-        self._running = True
-        try:
-            # with patch_stdout():
-            while True:
-                if self._should_exit:
-                    return
-                inpt = self._prompt()
-                if self._should_exit:
-                    # If something requested exit but we are alredy asked user for input, exit here to prevent executing next command
-                    return
-                if inpt != "":
-                    try:
-                        self.proc_string(inpt)
-                    except Exception as e:
-                        if self.COMMAND_EXCEPTION_TRACEBACK:
-                            c = console.Console()
-                            t = traceback.Traceback(
-                                show_locals=self.COMMAND_EXCEPTION_TRACEBACK_LOCALS
-                            )
-                            t.trace.stacks[0].frames = t.trace.stacks[0].frames[2:]
-                            c.print(t)
-
-                        if self.COMMAND_EXCEPTION_RERAISE:
-                            raise e
-        except KeyboardInterrupt as keyboard_interrupt:
-            if self.END_ON_CTRL_C:
-                self._should_exit = True
-            if self.RAISE_ON_CTRL_C:
-                raise keyboard_interrupt
-        finally:
-            self._running = False
-            self._should_exit = False
-
-    def _prompt(self) -> str:
-        if self.RICH_PROMPT:
-            rich_print(self.prompt, end="")
-            return self._promt_session.prompt()
+    def __prompt_command_hanlder(self, text: str | None):
+        if text is None:
+            print(self.prompt)
         else:
-            return self._promt_session.prompt(self.prompt)
-
-    def stop_loop(self):
-        self._should_exit = True
-
-    def parse_line(self, line: str, filter_empty: bool) -> list[list[str]]:
-        output: list[list[str]] = [[]]
-        for part in shlex.split(line):
-            chunks = part.split(";")
-            if len(chunks) == 1:
-                output[-1].append(part)
-            else:
-                # chunk0;chunk1;chunk2;...;chunkX
-                # ["chunk0", "chunk1", "chunk2", ..., "chunkX"]
-                # "chunk0" patří k přechozímu příkazu,
-                # "chunk1", "chunk2", ... jsou (celé) samostané příkazy,
-                # "chunkX" je začátek následující příkazu, který může pokračovat v dalším partu
-                output[-1].append(chunks[0])
-                # `filter`, protože nechceme prázdný stringy pokud se bude parsovat tohle: ";;;;;;;;;"
-                output += list(
-                    filter(lambda x: x != "", map(lambda x: [x], chunks[1:-1]))
-                )
-                output.append([chunks[-1]])
-        if filter_empty:
-            output = list(filter(lambda x: len(x) != 0, output))
-        return output
+            self.prompt = text
 
     def __python_exec(self, inpt: str):
         print(python_exec(inpt, self.PYTHON_EXEC_GLOBALS, self.PYTHON_EXEC_LOCALS))

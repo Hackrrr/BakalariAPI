@@ -16,10 +16,10 @@ import warnings
 import webbrowser
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Callable, cast, Any
+from typing import Any, Callable, cast, IO
 
-import appdirs
 import bakalariapi
+import platformdirs
 from bs4 import BeautifulSoup
 from prompt_toolkit.input import create_input
 from prompt_toolkit.key_binding import KeyPress
@@ -28,16 +28,16 @@ from prompt_toolkit.shortcuts.progress_bar import ProgressBar, ProgressBarCounte
 
 # Import kvůli tomu, aby jsme mohli volat rovnou 'inspect()' v python execu ze shellu
 from rich import inspect
-from rich import print as rich_print
+import rich
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.syntax import Syntax
 
 # Takový hack na to, aby `bakalarishell` šel spustit také přímo ze zdrojové složky
 # Pokud se `bakalarishell` spustí jako modul (= přes `import`), tak vše proběhne v pořádku
-# Pokud se ale spustí přes "python main.py" nebo "python bakalarishell", tak relativní
-# `import` selže ("ImportError: attempted relative import with no known parent package")
-# a `shell` se naimportuje "přímo" (resp. ne relativně), což už je v pořádku.
+# Pokud se ale spustí přes "python main.py" nebo "python bakalarishell" (kde "bakalarishell"
+# je složka), tak relativní `import` selže ("ImportError: attempted relative import with no
+# known parent package") a `shell` se naimportuje "přímo" (resp. ne relativně), což už je v pořádku.
 # Pozn.: Pokud někdo dumá nad tím, proč zde tedy není jen druhá možnost, tak to je
 # kvůli tomu, že ta zase pro změnu nefugnuje při importu jako modul, jelikož v tom případě
 # hledá modul `shell` jako "globální" modul (ne jako "lokální" ve složce), tudíž selže.
@@ -50,7 +50,9 @@ cls = shell.cls
 
 api: bakalariapi.BakalariAPI
 shell_instance: shell.Shell
-dirs = appdirs.AppDirs(appauthor="BakalariAPI", appname="bakalarishell", roaming=True)
+dirs = platformdirs.PlatformDirs(
+    appauthor="BakalariAPI", appname="bakalarishell", roaming=True
+)
 CONFIG_FILE_PATH = os.path.join(dirs.user_config_dir, "config.json")
 
 
@@ -78,6 +80,18 @@ args: Args
 ##################################################
 #####                 FUNKCE                 #####
 ##################################################
+
+
+def rich_print(
+    *objects: Any,
+    sep: str = " ",
+    end: str = "\n",
+    file: IO[str] | None = None,
+    flush: bool = False,
+    **kwargs,
+):
+    c = rich.get_console() if file is None else Console(file=file)
+    return c.print(*objects, sep=sep, end=end, **kwargs)
 
 
 def partial_init_notice():
@@ -278,6 +292,10 @@ async def keyhandler(
         for key_press in keys:
             if done_on_enter and key_press.key == Keys.Enter:
                 done()
+            # elif key_press.key == Keys.F4:
+            #     for key_press in keys:
+            #         if key_press.key == Keys.Escape:
+            #             raise SystemExit
             elif not mask_keyboard_interrupt and key_press.key == Keys.ControlC:
                 raise KeyboardInterrupt
             elif handler is not None:
@@ -346,7 +364,10 @@ def Init():
             args.password = ""
         api.password = args.password
 
-    print(f"Kontrola stavu serveru/webu... ({api.server_info.url})")
+    rich_print(
+        f"Kontrola stavu serveru/webu [cyan]{api.server_info.url}[/cyan]...",
+        highlight=False,
+    )
     if not api.is_server_running():
         try:
             if dialog_ano_ne(
@@ -361,13 +382,16 @@ def Init():
         except KeyboardInterrupt:
             partial_init_mode()
             return
-    print("Sever/web běží")
-    print(f"Kontrola přihlašovacích údajů pro uživatele '{api.username}'")
+    rich_print("[green]Sever/web běží[/green]")
+    rich_print(
+        f"Kontrola přihlašovacích údajů pro uživatele [cyan]{api.username}[/cyan]...",
+        highlight=False,
+    )
     if not api.is_login_valid():
         rich_print("[red]Přihlašovací údaje jsou neplatné![/red]")
         partial_init_mode()
         return
-    print("Přihlašovací údaje ověřeny a jsou správné")
+    rich_print("[green]Přihlašovací údaje ověřeny a jsou správné[/green]")
     print("Nastavuji...")
     with warnings.catch_warnings():
         # Nechceme dostat `VersionMismatchWarning`, protože v `SeverInfo()` kontrolujeme verzi manuálně
@@ -378,15 +402,19 @@ def Init():
 
 
 def ServerInfo():
-    print(
-        f"Typ uživatele: {'Není k dispozici' if api.user_info.type == '' else api.user_info.type}\n"
-        f"Uživatelký hash: {'Není k dispozici' if api.user_info.hash == '' else api.user_info.hash}\n"
-        f"Verze Bakalářů: {'Není k dispozici' if api.server_info.version == '' else api.server_info.version}\n"
-        f"Datum verze Bakalářů: {'Není k dispozici' if api.server_info.version_date is None else api.server_info.version_date.strftime('%d. %m. %Y')}\n"
-        f"Evidenční číslo verze Bakalářů: {'Není k dispozici' if api.server_info.evid_number is None else api.server_info.evid_number}"
+    rich_print(
+        f"Typ uživatele: [cyan]{'Není k dispozici' if api.user_info.type == '' else api.user_info.type}[/cyan]\n"
+        f"Uživatelký hash: [cyan]{'Není k dispozici' if api.user_info.hash == '' else api.user_info.hash}[/cyan]\n"
+        f"Verze Bakalářů: [cyan]{'Není k dispozici' if api.server_info.version == '' else api.server_info.version}[/cyan]\n"
+        f"Datum verze Bakalářů: [cyan]{'Není k dispozici' if api.server_info.version_date is None else api.server_info.version_date.strftime('%d. %m. %Y')}[/cyan]\n"
+        f"Evidenční číslo verze Bakalářů: [cyan]{'Není k dispozici' if api.server_info.evid_number is None else api.server_info.evid_number}[/cyan]",
+        highlight=False,
     )
     if not api.is_version_supported():
-        print("*** Jiná verze Bakalářů! Všechny funkce nemusejí fungovat správně! ***")
+        rich_print(
+            "[yellow]*** Jiná verze Bakalářů! Všechny funkce nemusejí fungovat správně! ***[/yellow]",
+            highlight=False,
+        )
 
 
 def Command_Komens(limit: int | None = None, force_fresh: bool = False):
@@ -1125,7 +1153,7 @@ def main():
             shell_instance.proc_string(command)
 
     try:
-        shell_instance.loop()
+        shell_instance.start_loop()
     except KeyboardInterrupt:
         Command_Konec(False)
 
@@ -1135,6 +1163,7 @@ def prepare_shell():
     predefined_commands = [x for x in shell.ShellPredefinedCommands]
     predefined_commands.remove(shell.ShellPredefinedCommands.EXIT)
     shell_instance = shell.Shell(
+        # prompt="[bright_green]BakalariAPI Shell[/bright_green][yellow]>[/yellow]",
         prompt="BakalariAPI Shell>",
         allow_python_exec=True,
         python_exec_prefix=" ",

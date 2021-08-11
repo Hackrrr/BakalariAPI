@@ -1,5 +1,5 @@
-appdirs
 bs4
+platformdirs
 prompt-toolkit
 requests
 rich

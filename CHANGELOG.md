@@ -13,7 +13,7 @@ Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 - Přidán příkaz "config" do `bakalarishell`, který umožňuje práci s konfigurací (uložení, zobrazení, smazání)
 - Přidán parametr `-d`/`--disable-config` pro `bakalarishell`, který zakazuje import uložené konfigurace
 - Přidán parametr `-c`/`--command` pro `bakalarishell`, kterým lze spustit příkazy po startu
-- Přidán parametr `rich_prompt` do `bakalarishell.shell.Shell`, kterým lze formátovat `.prompt` přes `rich` modul
+<!-- - Přidán parametr `rich_prompt` do `bakalarishell.shell.Shell`, kterým lze formátovat `.prompt` přes `rich` modul -->
 
 ### Changed
 - Definice `JSONEncoder` a `JSONDecoder` byly přesunuty z modulu `looting.Looting` do modulu `utils` a přejmenovány na `JSONSerializer` a `JSONDeserializer` a přesunuta a přejmenována i `logger` instance (z `bakalariapi.looting.serializer` na `bakalariapi.utils.serializer`)
