@@ -182,6 +182,7 @@ def _resolve(
             output.add_loot(o)
     return output
 
+
 def is_version_supported(version: str):
     """Zkontroluje, jestli `BakaláriAPI` podporuje danou verzi Bakalářů.
 
@@ -368,7 +369,11 @@ class BakalariAPI:
             Vrátí `True` pokud se shodují, jinak `False`.
             Pokud verze Bakalářů nebyla získána (tzn. je `None`), vrátí `False`.
         """
-        return False if self.server_info.version is None else is_version_supported(self.server_info.version)
+        return (
+            False
+            if self.server_info.version is None
+            else is_version_supported(self.server_info.version)
+        )
 
     # GRADES
     @overload

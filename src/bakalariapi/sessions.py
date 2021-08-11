@@ -113,7 +113,7 @@ class BakalariSession(ABC):
         self.busy = True
         return self
 
-    def __exit__(self):
+    def __exit__(self, exc_type, exc_value, traceback):
         self.busy = False
 
 

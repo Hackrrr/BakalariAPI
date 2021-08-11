@@ -1114,7 +1114,9 @@ def main():
         autorun()
 
     print()
-    print("Shell aktivní")
+    rich_print(
+        f"Bakalarishell aktivní - verze BakalářiAPI je [bright_cyan]{bakalariapi.__version__}[/bright_cyan]"
+    )
 
     if len(args.commands) != 0:
         print("Vykonávám zadané příkazy...")

@@ -8,27 +8,6 @@ SeleniumHandler - Classa obsahující nastavení Selenia
 Browser - Enum pro SeleniumHandler
 """
 
-
-from . import bakalari, exceptions, looting, modules, objects, seleniumhandler, sessions
-from .bakalari import BakalariAPI, GetMode
-from .looting import Looting
-from .objects import (
-    BakalariFile,
-    BakalariObject,
-    Grade,
-    Homework,
-    HomeworkFile,
-    Komens,
-    KomensFile,
-    Meeting,
-    MeetingProvider,
-    ServerInfo,
-    Student,
-    UnresolvedID,
-    UserInfo,
-)
-from .seleniumhandler import Browser, SeleniumHandler
-
 __all__ = [
     "BakalariAPI",
     "GetMode",
@@ -51,3 +30,23 @@ __all__ = [
     "Homework",
 ]
 __version__ = "3.0.0-dev"
+
+from . import bakalari, exceptions, looting, modules, objects, seleniumhandler, sessions
+from .bakalari import BakalariAPI, GetMode
+from .looting import Looting
+from .objects import (
+    BakalariFile,
+    BakalariObject,
+    Grade,
+    Homework,
+    HomeworkFile,
+    Komens,
+    KomensFile,
+    Meeting,
+    MeetingProvider,
+    ServerInfo,
+    Student,
+    UnresolvedID,
+    UserInfo,
+)
+from .seleniumhandler import Browser, SeleniumHandler
