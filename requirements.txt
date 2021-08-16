@@ -4,3 +4,4 @@ prompt-toolkit
 requests
 rich
 selenium
+typing-extensions

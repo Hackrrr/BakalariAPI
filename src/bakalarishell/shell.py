@@ -11,8 +11,6 @@ import sys
 from enum import Enum, IntEnum
 from typing import Any, Callable, Iterable
 
-from rich import console, traceback, print as rich_print
-
 from prompt_toolkit import PromptSession
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.completion import CompleteEvent, Completer, Completion
@@ -21,6 +19,9 @@ from prompt_toolkit.history import DummyHistory
 from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
 from prompt_toolkit.output.vt100 import Vt100_Output
 from prompt_toolkit.patch_stdout import patch_stdout
+from rich import console
+from rich import print as rich_print
+from rich import traceback
 
 __all__ = [
     "ShellArgumentParser",
@@ -189,9 +190,7 @@ class Shell:
         *,
         prompt: str = "> ",
         commands: list[Command] | None = None,
-        predefined_commands: list[ShellPredefinedCommands] = [
-            x for x in ShellPredefinedCommands
-        ],
+        predefined_commands: list[ShellPredefinedCommands] | None = None,
         first_command_case_sensitive: bool = False,
         allow_shorhands: bool = True,
         allow_python_exec: bool = False,
@@ -215,6 +214,8 @@ class Shell:
         self.commands: dict[CommandEntryPriority, dict[str, CommandEntry]] = {
             x: {} for x in [y for y in CommandEntryPriority]
         }
+        if predefined_commands is None:
+            predefined_commands = [x for x in ShellPredefinedCommands]
 
         self.FIRST_COMMAND_CASE_SENSITIVE: bool = first_command_case_sensitive
         self.ALLOW_SHORTHANDS: bool = allow_shorhands
@@ -253,7 +254,7 @@ class Shell:
                 # event.current_buffer.document.paste_clipboard_data()
                 ...
 
-        self._promt_session = PromptSession(
+        self._promt_session: PromptSession = PromptSession(
             history=None if history else DummyHistory(),
             auto_suggest=AutoSuggestFromHistory() if history_suggestions else None,
             completer=ShellCompleter(self) if autocomplete else None,

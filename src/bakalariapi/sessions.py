@@ -6,13 +6,13 @@ import atexit
 import json
 from abc import ABC, abstractmethod
 from threading import Lock, Thread
-from typing import Type, TypeVar, cast
 from time import sleep
+from typing import TypeVar, cast
 
 import requests
 from selenium.webdriver.remote.webdriver import WebDriver
 
-from . import utils, exceptions
+from . import exceptions, utils
 from .bakalari import BakalariAPI, Endpoint
 
 
@@ -221,7 +221,7 @@ class SeleniumSession(BakalariSession):
 
     def login(self) -> bool:
         if self.requests_acceleration:
-            output = requests.post(
+            response = requests.post(
                 self.bakalariAPI.get_endpoint(Endpoint.LOGIN),
                 {
                     "username": self.bakalariAPI.username,
@@ -229,9 +229,9 @@ class SeleniumSession(BakalariSession):
                 },
                 allow_redirects=False,
             )
-            if output.is_redirect:
+            if response.is_redirect:
                 with self:
-                    cookies = utils.cookies_requests2webdriver(output.cookies)
+                    cookies = utils.cookies_requests2webdriver(response.cookies)
 
                     # Musíme být na správné stránce, jelikož jinak se nám vrátí error o špatné doméně,
                     # kterou si to případně domyslí, když je na dané stránce I guess a asi není nejlepší
@@ -296,11 +296,11 @@ class SessionManager:
     def __init__(self, ref: BakalariAPI, start_auto_extend: bool = False):
         self.__lock = Lock()
         self.bakalariAPI: BakalariAPI = ref
-        self.sessions: dict[Type[BakalariSession], list[BakalariSession]] = {}
+        self.sessions: dict[type[BakalariSession], list[BakalariSession]] = {}
         self.start_auto_extend: bool = start_auto_extend
         atexit.register(self.kill_all, False)
 
-    def create_session(self, session_class: Type[Session], set_busy=True) -> Session:
+    def create_session(self, session_class: type[Session], set_busy=True) -> Session:
         """Vytvoří novou session daného typu a navrátí ji.
 
         Pozn.:
@@ -319,7 +319,7 @@ class SessionManager:
         return session
 
     def get_session(
-        self, session_class: Type[Session], set_busy=True, filter_busy=True
+        self, session_class: type[Session], set_busy=True, filter_busy=True
     ) -> Session | None:
         """Navrátí (volnou) session daného typu. Pokud taková neexistuje, vrátí None.
 
@@ -337,11 +337,18 @@ class SessionManager:
             for session in self.sessions[session_class]:
                 if not (filter_busy and session.busy):
                     session.busy = set_busy
+                    # Tady `cast` prostě být musí, protože nelze udělat "inteligentní" `dict`, kde každý klíč má určitý typ,
+                    # ale pokud je správná logika přidávání sessionů do `self.sessions`, tak jsme v pohodě.
+                    # TODO: BTW když tak nad tím přemýšlím - každý klíč může mít jiný typ... Máme přeci `TypedDict`,
+                    # takže jeden problém vyřešen. Druhý problém je ale ten, že by bylo fajn to mít dynamické dle,
+                    # definovaných tříd které derivují z `BakalariSession. A kdyby to nešlo, tak bych rád zkusil
+                    # udělat statický, jak to s tím půjde - přeci jen se to týká dvou tříd a na typování `self.sessions`,
+                    # závisí pouze tento script.
                     return cast(Session, session)
         return None
 
     def get_session_or_create(
-        self, session_class: Type[Session], set_busy=True, filter_busy=True
+        self, session_class: type[Session], set_busy=True, filter_busy=True
     ) -> Session:
         """Navrátí (volnou) session daného typu. Pokud taková neexistuje, vrátí None.
 
@@ -387,7 +394,7 @@ class SessionManager:
             return True
         return False
 
-    def kill_all(self, nice: bool = True, session_class: Type[Session] | None = None):
+    def kill_all(self, nice: bool = True, session_class: type[Session] | None = None):
         """Ukončí všechny sessiony.
 
         Argumenty:
@@ -408,7 +415,7 @@ class SessionManager:
                     session.kill(nice)
                 del self.sessions[session_class]
 
-    def kill_dead(self, session_class: Type[Session] | None = None):
+    def kill_dead(self, session_class: type[Session] | None = None):
         """Ukončí všechny sessiony, které jsou již odhlášeni z Bakalářů.
 
         Argumenty:

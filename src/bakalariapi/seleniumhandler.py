@@ -36,31 +36,35 @@ class SeleniumHandler:
 
     def open(self, try_silent: bool = True) -> WebDriver:
         """Spustí a vrátí WebDriver instanci"""
-        # try_silent = False # DEBUG LINE ONLY - SHOULD BE COMMENTED
+        # try_silent = False # Pouze pro debugování
+        driver: WebDriver
+        if self.browser == Browser.CHROME:
+            options_chrome = webdriver.ChromeOptions()
+            if try_silent:
+                options_chrome.set_headless(True)
+            driver = webdriver.Chrome(options=options_chrome, **self._builded_params)
+        elif self.browser == Browser.FIREFOX:
+            options_firefox = webdriver.FirefoxOptions()
+            if try_silent:
+                options_firefox.set_headless(True)
+            driver = webdriver.Firefox(options=options_firefox, **self._builded_params)
+        elif self.browser == Browser.EDGE:
+            driver = webdriver.Edge(**self._builded_params)
+        elif self.browser == Browser.SAFARI:
+            driver = webdriver.Safari(**self._builded_params)
+        elif self.browser == Browser.OPERA:
+            driver = webdriver.Opera(**self._builded_params)
+        elif self.browser == Browser.IE:
+            options_ie = webdriver.IeOptions()
+            driver = webdriver.Ie(options=options_ie, **self._builded_params)
+        else:
+            raise ValueError()
+        return driver
+
+    def build_params(self):
         path = (
             {"executable_path": self.executable_path}
             if self.executable_path is not None
             else {}
         )
-        if self.browser == Browser.CHROME:
-            options = webdriver.ChromeOptions()
-            if try_silent:
-                options.set_headless(True)
-            driver = webdriver.Chrome(options=options, **path, **self.params)
-        elif self.browser == Browser.FIREFOX:
-            options = webdriver.FirefoxOptions()
-            if try_silent:
-                options.set_headless(True)
-            driver = webdriver.Firefox(options=options, **path, **self.params)
-        elif self.browser == Browser.EDGE:
-            driver = webdriver.Edge(**path, **self.params)
-        elif self.browser == Browser.SAFARI:
-            driver = webdriver.Safari(**path, **self.params)
-        elif self.browser == Browser.OPERA:
-            driver = webdriver.Opera(**path, **self.params)
-        elif self.browser == Browser.IE:
-            options = webdriver.IeOptions()
-            driver = webdriver.Ie(options=options, **path, **self.params)
-        else:
-            raise ValueError()
-        return driver
+        self._builded_params = {**path, **self.params}

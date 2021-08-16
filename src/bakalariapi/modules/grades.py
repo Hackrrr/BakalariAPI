@@ -1,9 +1,10 @@
 """Modul obsahující funkce týkající se známek."""
 import json
 from datetime import datetime
-
-from bs4 import BeautifulSoup, Tag
 from typing import cast
+
+from bs4 import BeautifulSoup
+from bs4.element import Tag  # Kvůli mypy - https://github.com/python/mypy/issues/10826
 
 from ..bakalari import BakalariAPI, Endpoint, _register_parser
 from ..looting import GetterOutput, ResultSet
@@ -31,9 +32,13 @@ def getter(
 def parser(getter_output: GetterOutput[BeautifulSoup]) -> ResultSet:
     """Parsuje stránku se známkami."""
     output = ResultSet()
-    znamky_list = getter_output.data("div", attrs={"data-clasif": True})
+    znamky_list = cast(
+        list[Tag], getter_output.data("div", attrs={"data-clasif": True})
+    )
     for znamka in znamky_list:
-        data = json.loads(cast(str, cast(Tag, znamka)["data-clasif"]))
+        # `cast()` jelikož některé atributy mohou být multi-valued, tak zde je možný typ __getitem__ i `list`.
+        # Ale tyto atributy jsou natrvdo předdefinované a "data-clasif" mezi nimi není.
+        data = json.loads(cast(str, znamka["data-clasif"]))
         output.add_loot(
             Grade(
                 data["id"],

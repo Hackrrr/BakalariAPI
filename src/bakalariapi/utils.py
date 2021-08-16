@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import sys
 from datetime import datetime, timedelta
-from typing import Any, Protocol, TypeVar, cast, runtime_checkable
+from typing import Any, TypeVar, cast
 
-from bs4 import Tag
+# from bs4 import Tag
+from bs4.element import Tag  # Kvůli mypy - https://github.com/python/mypy/issues/10826
 from requests.cookies import RequestsCookieJar
 from selenium.webdriver.remote.webdriver import WebDriver
+from typing_extensions import TypeGuard
 
 LOGGER = logging.getLogger("bakalariapi.utils")
-LOGGER_SERIALIZER = logging.getLogger("bakalariapi.utils.serializer")
 
 
 T0 = TypeVar("T0")
@@ -64,12 +64,12 @@ def bs_get_text(soup: Tag) -> str:
 
     # TODO: Převést <p> na nové řádky
     for br in soup("br"):
-        # Ok, tady má `replace_with()` špatně stub a správně má brát i string
-        br.replace_with("\n" + cast(Tag, br).text)
+        br = cast(Tag, br)
+        br.replace_with("\n" + br.text)
 
-    body = soup.find("body")
+    body = cast(Tag, soup.find("body"))
     if body is not None:
-        soup = cast(Tag, body)
+        soup = body
 
     return soup.get_text().strip()
 
@@ -187,20 +187,6 @@ def line_modifier(text: str, prefix: str = "", suffix: str = "") -> str:
     return "\n".join(lines)
 
 
-@runtime_checkable
-class Serializable(Protocol[T0, T1]):
-    """Protokol, který implementují třídy, které jsou schopné serializace."""
-
-    def serialize(self: T1) -> T0:
-        """Serializuje objekt tak, aby ho mohla následně metoda `.deserialize()` deserializovat."""
-        raise NotImplementedError()
-
-    @classmethod
-    def deserialize(cls, data: T0) -> T1:
-        """Deserializuje data, které vyprodukovala `.serialize()` metoda."""
-        raise NotImplementedError()
-
-
 def resolve_string(string: str) -> Any:
     """Převede 'název' na objekt."""
     splitted = string.split(".")
@@ -224,50 +210,6 @@ def get_full_type_name(t: type) -> str:
     return f"{t.__module__}.{t.__name__}"
 
 
-# TODO: Merge?
-class JSONSerializer(json.JSONEncoder):
-    def default(self, o):
-        full_type_name = get_full_type_name(type(o))
-        LOGGER_SERIALIZER.debug(
-            "Serializing object %s resolved to type %s", o, full_type_name
-        )
-        if isinstance(o, datetime):
-            LOGGER_SERIALIZER.debug(
-                "... special handling (object seems like datetime instance)"
-            )
-            return {
-                "_type": full_type_name,
-                "data": o.isoformat(),
-            }
-        if isinstance(o, Serializable):
-            LOGGER_SERIALIZER.debug(
-                "... special handling (object implemets Serializable protocol)"
-            )
-            return {"_type": full_type_name, "data": o.serialize()}
-        return super().default(o)
-
-
-class JSONDeserializer(json.JSONDecoder):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, object_hook=self.hook, **kwargs)
-
-    def hook(self, o):
-        LOGGER_SERIALIZER.debug("Deserializing object %s", o)
-        if "_type" not in o:
-            return o
-        real_type = resolve_string(o["_type"])
-        LOGGER_SERIALIZER.debug('... found "_type" value, resolved to %s', real_type)
-        if real_type == datetime:
-            LOGGER_SERIALIZER.debug("... deserializing via special case")
-            return datetime.fromisoformat(o["data"])
-        if issubclass(real_type, Serializable):
-            LOGGER_SERIALIZER.debug(
-                "... resolved type has implementation of Serializable protocol, deserializing via this protocol"
-            )
-            return real_type.deserialize(o["data"])
-        raise TypeError("Unknown type to load; Type: " + o["_type"])
-
-
 def cookies_webdriver2requests(webdriver: WebDriver) -> dict[str, str]:
     """Převede Selenium cookies do formátu cookies pro `requests` modul."""
     return {entry["name"]: entry["value"] for entry in webdriver.get_cookies()}
@@ -286,3 +228,21 @@ def cookies_requests2webdriver(cookies: RequestsCookieJar) -> list[dict[str, Any
         }
         for cookie in cookies
     ]
+
+
+def is_typed_dict(data_dict: dict, typed_dict: type[T0]) -> TypeGuard[T0]:
+    # Měl by tu být i paramter "type_check: bool", ale jelikož `typing` modul nemá žádnou
+    # metodu, která by ověřila správnost typu, tak by bylo potřeba napsat vlastní typechecker
+    # a to není tak jednoduché, jak by se mohlo zdát LULW. Ano, zkusil jsem to, ale existuje
+    # extrémní množství "krajních případů" (resp. jen "případů"), které se musí odchytit.
+    # Nakonec jsem ale usoudil, že za tu práci to (zatím) nestojí.
+    # Nejsnadnější věc by byla vzít tenhle script: https://stackoverflow.com/a/55504010
+    # nebo použít tohle: https://github.com/agronholm/typeguard; https://stackoverflow.com/a/65735336
+    if len(data_dict) != len(typed_dict.__annotations__):
+        return False
+    for name, type_ in typed_dict.__annotations__.items():
+        if name not in data_dict:
+            return False
+        # if type_check and not check_type(data_dict[name], type_):
+        #     return False
+    return True

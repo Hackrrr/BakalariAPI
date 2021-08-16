@@ -41,10 +41,22 @@ class PartialInitError(BakalariAPIError):
     """
 
 
+class MissingSerializer(BakalariAPIError):
+    """Výjimka, která nastane při pokusu o serilializaci typu, který nelze serializovat přes `serializable.Serializable` protokol nebo přes registrované serializery.
+
+    Pozn.: Přestože nastane tato výjimka, typ může být stále serializovatelný.
+    Např. tato výjimka nastane pro typ `int`, jelikož samotný typ neimplementuje `Serializable` protokol a (pravděpodobně)
+    pro něj nebude zaregistrován žádný serializer, avšak základní JSON serializer je schopný `int` serializovat.
+    """
+
+
 ### WARNING ###
 class VersionMismatchWarning(BakalariAPIWarning):
-    """Výjimka, která nastane při neshodě verze Bakalářů a `LAST_SUPPORTED_VERSION`.
+    """Varování, které nastane při neshodě verze Bakalářů a `LAST_SUPPORTED_VERSION`.
 
-    Tento warning se může ignorovat, jelikož ve většině případů se nic závažného neděje.
-    Je poteřeba mít na paměti, že pokud tento warning nastane, `BakalářiAPI` může být nestabilní.
+    Toto varování se může ignorovat, jelikož ve většině případů se nic závažného neděje avšak `BakalářiAPI` může být nestabilní.
     """
+
+
+class MissingDeserializer(BakalariAPIWarning):
+    """Varování, které nastane při pokusu o deserilializaci dat, které vypadají, že by se dali deserializovat, ale není pro ně registrovaný deserializer."""

@@ -1,19 +1,20 @@
 """Modul obsahující funkce týkající se úkolů."""
 import logging
 from datetime import datetime
-
-from bs4 import BeautifulSoup, Tag
 from typing import cast
+
+from bs4 import BeautifulSoup
+from bs4.element import Tag  # Kvůli mypy - https://github.com/python/mypy/issues/10826
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as SeleniumConditions
 from selenium.webdriver.support.wait import WebDriverWait
 
 from ..bakalari import BakalariAPI, Endpoint, _register_parser
+from ..exceptions import MissingElementError
 from ..looting import GetterOutput, ResultSet
 from ..objects import Homework, HomeworkFile
 from ..sessions import RequestsSession, SeleniumSession
-from ..exceptions import MissingElementError
 
 LOGGER = logging.getLogger("bakalariapi.modules.homeworks")
 
@@ -54,7 +55,7 @@ def get_slow(
 
         while True:
             source = session.session.page_source
-            temp_result = parser(
+            temp_result = bakalariAPI._parse(
                 GetterOutput(Endpoint.HOMEWORKS, BeautifulSoup(source, "html.parser"))
             )
 
@@ -104,15 +105,15 @@ def get_slow(
 def parser(getter_output: GetterOutput[BeautifulSoup]) -> ResultSet:
     """Parsuje získanou stránku s domácími úkoly a vrací parsované úkoly."""
     output = ResultSet()
-    table = getter_output.data.find(id="grdukoly_DXMainTable")
+    table = cast(Tag, getter_output.data.find(id="grdukoly_DXMainTable"))
     if table is None:
         # Žádné úkoly (asi) nejsou
         return ResultSet()
-    tmp = table.find("tbody")
+    tmp = cast(Tag, table.find("tbody"))
     # Jelikož to jsou Bakaláři, tak mají 2 rozdílné struktury :) Poprvé jsou řádky přímo v <table>, podruhé jsou vnořeny ještě v <tbody>
     if tmp is not None:
         table = tmp
-    rows = cast(Tag, table)("tr", recursive=False)
+    rows = cast(list[Tag], table("tr", recursive=False))
     for row in rows[1:]:  # První řádek je hlavička tabulky, takže přeskakujeme
         # Ok, tohle je špatný a ano, vím to... Ale TBH, pokud se něco pokazí, tak se stejně bude debugovat
         # více do podrobna, takže informace kde přesně v "řetězu" je chyba až tak podstatná není
@@ -120,20 +121,31 @@ def parser(getter_output: GetterOutput[BeautifulSoup]) -> ResultSet:
         # Pokud bychom správně napověděli přes `cast()`, že `tds` je `list[Tag]`, tak pak si Pylance stěžuje mnohem více
         # a museli bychom doslova na každý řádek cpát další `cast()` (někde i vícekrát na jeden řádek)
         try:
-            tds = row("td")  # type: ignore # viz víše
+            tds = cast(list[Tag], row("td"))
             datum_odevzdani = datetime.strptime(
-                tds[0].find("div")("div")[1].text.strip(), "%d. %m."
+                cast(list[Tag], cast(Tag, tds[0].find("div"))("div"))[1].text.strip(),
+                "%d. %m.",
             )
             predmet = tds[1].text
             zadani = tds[2].text
             datum_zadani = datetime.strptime(tds[3].text.strip(), "%d. %m.")
-            hotovo = tds[5].div.input["value"].lower() == "true"
-            ID = tds[6].span["target"]  # = tds[-1]
+            # Aby se nemuseli dělat `None` checky, tak se jen chytí případný `AttributeError`
+            try:
+                hotovo = tds[5].div.input["value"].lower() == "true"  # type: ignore
+            except AttributeError as e:
+                raise MissingElementError from e
+            try:
+                ID = cast(str, tds[6].span["target"])  # type: ignore
+            except AttributeError as e:
+                raise MissingElementError from e
 
-            files = [
-                HomeworkFile(a["href"][len("getFile.aspx?f=") :], a.span.text, ID)
-                for a in tds[4]("a")
-            ]
+            try:
+                files = [
+                    HomeworkFile(a["href"][len("getFile.aspx?f=") :], a.span.text, ID)  # type: ignore
+                    for a in cast(list[Tag], tds[4]("a"))
+                ]
+            except AttributeError as e:
+                raise MissingElementError from e
             output.add_loot(
                 Homework(
                     ID, datum_odevzdani, predmet, zadani, datum_zadani, hotovo, files

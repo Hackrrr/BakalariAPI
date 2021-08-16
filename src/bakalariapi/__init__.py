@@ -31,7 +31,16 @@ __all__ = [
 ]
 __version__ = "3.0.0-dev"
 
-from . import bakalari, exceptions, looting, modules, objects, seleniumhandler, sessions
+from . import (
+    bakalari,
+    exceptions,
+    looting,
+    modules,
+    objects,
+    seleniumhandler,
+    serialization,
+    sessions,
+)
 from .bakalari import BakalariAPI, GetMode
 from .looting import Looting
 from .objects import (

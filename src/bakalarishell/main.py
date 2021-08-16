@@ -3,23 +3,22 @@ from __future__ import annotations
 import argparse
 import asyncio
 import getpass
-import io
 import json
 import logging
 import logging.config
 import os
-import sys
 import threading
 import time
 import traceback
 import warnings
 import webbrowser
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, cast, IO
+from datetime import datetime, timedelta
+from typing import IO, Any, Callable, cast
 
 import bakalariapi
 import platformdirs
+import rich
 from bs4 import BeautifulSoup
 from prompt_toolkit.input import create_input
 from prompt_toolkit.key_binding import KeyPress
@@ -28,7 +27,6 @@ from prompt_toolkit.shortcuts.progress_bar import ProgressBar, ProgressBarCounte
 
 # Import kvůli tomu, aby jsme mohli volat rovnou 'inspect()' v python execu ze shellu
 from rich import inspect
-import rich
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.syntax import Syntax
@@ -44,7 +42,7 @@ from rich.syntax import Syntax
 try:
     from . import shell
 except ImportError:
-    import shell
+    import shell  # type: ignore # Aby nebylo mypy nešťastné ohledně "redefinování" shellu
 
 cls = shell.cls
 
@@ -88,15 +86,20 @@ def rich_print(
     end: str = "\n",
     file: IO[str] | None = None,
     flush: bool = False,
+    color: str | None = None,
     **kwargs,
 ):
     c = rich.get_console() if file is None else Console(file=file)
+    if color is not None:
+        # Pravděpodobně někdy bude problém, že se vše převádí na string, ale zatím to problém není, tak to neřeším eShrug
+        objects = tuple(map(lambda x: f"[{color}]{x}[/{color}]", objects))
     return c.print(*objects, sep=sep, end=end, **kwargs)
 
 
 def partial_init_notice():
     rich_print(
-        '[yellow]Tuto akci nelze vykonat, jelikož shell se nachází v omezeném módu. Pro přepnutí do online módu můžete zkusit příkaz "init".[/yellow]'
+        'Tuto akci nelze vykonat, jelikož shell se nachází v omezeném módu. Pro přepnutí do online módu můžete zkusit příkaz "init".',
+        color="yellow",
     )
 
 
@@ -107,7 +110,7 @@ def dialog_ano_ne(
     while True:
         # ano/true/yes/1 / ne/false/no/0
         if color is not None:
-            rich_print(f"[{color}]{message}[/{color}]", end="")
+            rich_print(message, end="", color=color)
             inpt = input()
         else:
             inpt = input(message)
@@ -123,8 +126,9 @@ def dialog_ano_ne(
 
 
 def dialog_cislo(text: str = "", default: int | None = None):
+    print(text, "" if default is None else f"({default})")
     while True:
-        inpt = input(text + ("" if default is None else f" ({default})"))
+        inpt = input()
         if not inpt:
             if default is None:
                 continue
@@ -192,9 +196,7 @@ def show(obj: bakalariapi.objects.BakalariObject, title: str | None = None):
         )
 
         def meeting_key_handler(key_press: KeyPress, done: Callable):
-            o = cast(
-                bakalariapi.Meeting, obj
-            )  # Pyright nebere v potaz IF z outer scopu
+            o = cast(bakalariapi.Meeting, obj)
             key = key_press.key.lower()
             if key == "o":
                 webbrowser.open(o.join_url)
@@ -306,10 +308,12 @@ async def keyhandler(
             await evnt.wait()
 
 
-def get_io_file(file: str, mode: str = "r+") -> io.IO:
-    """Vytvoří a vrátí file handler na daný soubor `file` v uživatelské (data) složce."""
+def get_io_file(file: str, create_file: bool, mode: str = "r+") -> IO:
+    """Vrátí file handler na daný soubor `file` v uživatelské (data) složce."""
     path = os.path.join(dirs.user_data_dir, file)
     if not os.path.exists(path):
+        if not create_file:
+            raise FileNotFoundError()
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "x"):
             pass
@@ -335,7 +339,8 @@ def save_config():
 def Init():
     def partial_init_mode():
         rich_print(
-            "\n[yellow]Inicilizace neproběhla úspěšně a shell poběží v omezeném módu.[/yellow]"
+            "\nInicilizace neproběhla úspěšně a shell poběží v omezeném módu.",
+            color="yellow",
         )
 
     if args.url is None:
@@ -343,7 +348,7 @@ def Init():
             args.url = input("URL adresa serveru: ")
             api.server_info.url = args.url
         except KeyboardInterrupt:
-            rich_print("[red]\nNebyla zadána adresa serveru![/red]")
+            rich_print("\nNebyla zadána adresa serveru", color="red")
             partial_init_mode()
             return
     if args.username is None:
@@ -351,7 +356,7 @@ def Init():
             args.username = input("Přihlašovací jméno: ")
             api.username = args.username
         except KeyboardInterrupt:
-            rich_print("[red]\nNebylo zadáno přihlašovací jméno![/red]")
+            rich_print("\nNebylo zadáno přihlašovací jméno", color="red")
             partial_init_mode()
             return
     if args.password is None:
@@ -359,7 +364,7 @@ def Init():
             args.password = getpass.getpass("Heslo: ")
         except KeyboardInterrupt:
             rich_print(
-                "[yellow]\nHeslo nebylo zadáno, předpokládá se prázdné heslo[/yellow]"
+                "\nHeslo nebylo zadáno, předpokládá se prázdné heslo", color="yellow"
             )
             args.password = ""
         api.password = args.password
@@ -382,16 +387,16 @@ def Init():
         except KeyboardInterrupt:
             partial_init_mode()
             return
-    rich_print("[green]Sever/web běží[/green]")
+    rich_print("Sever/web běží", color="green")
     rich_print(
         f"Kontrola přihlašovacích údajů pro uživatele [cyan]{api.username}[/cyan]...",
         highlight=False,
     )
     if not api.is_login_valid():
-        rich_print("[red]Přihlašovací údaje jsou neplatné![/red]")
+        rich_print("Přihlašovací údaje jsou neplatné", color="red")
         partial_init_mode()
         return
-    rich_print("[green]Přihlašovací údaje ověřeny a jsou správné[/green]")
+    rich_print("Přihlašovací údaje ověřeny a jsou správné", color="green")
     print("Nastavuji...")
     with warnings.catch_warnings():
         # Nechceme dostat `VersionMismatchWarning`, protože v `SeverInfo()` kontrolujeme verzi manuálně
@@ -412,8 +417,9 @@ def ServerInfo():
     )
     if not api.is_version_supported():
         rich_print(
-            "[yellow]*** Jiná verze Bakalářů! Všechny funkce nemusejí fungovat správně! ***[/yellow]",
+            "*** Jiná verze Bakalářů! Všechny funkce nemusejí fungovat správně! ***",
             highlight=False,
+            color="yellow",
         )
 
 
@@ -424,7 +430,7 @@ def Command_Komens(limit: int | None = None, force_fresh: bool = False):
             return []
         output: list[bakalariapi.Komens] = []
         with ProgressBar("Získávám zprávy...") as progress_bar:
-            counter = progress_bar(remove_when_done=True)
+            counter: ProgressBarCounter = progress_bar(remove_when_done=True)
             unresolved = api._parse(
                 bakalariapi.modules.komens.getter_komens_ids(api)
             ).get(bakalariapi.UnresolvedID)[:limit]
@@ -543,7 +549,10 @@ def Command_Studenti(force_fresh: bool = False):
 
     length = len(studenti)
     print(f"Studenti získáni, počet studentů je {length}")
-    count = dialog_cislo("Kolik zobrazit výsledků najednou? (Výchozí 25) ", 25)
+    try:
+        count = dialog_cislo("Kolik zobrazit výsledků najednou?", 25)
+    except KeyboardInterrupt:
+        return
     offset = 0
     cls()
     while offset < length:
@@ -622,7 +631,7 @@ def Command_Konec(nice: bool = True):
 
 def Command_Export(file_name: str = "main"):
     print("Generace JSON dat...")
-    with get_io_file(file_name) as f:
+    with get_io_file(file_name, True) as f:
         f.write(api.looting.export_json())
         # Odstraníme data, která jsou případně po JSONu, co jsme teď napsali (třeba pozůstatek po předchozím JSONu, pokud byl delší, jak náš současný)
         f.truncate()
@@ -630,9 +639,16 @@ def Command_Export(file_name: str = "main"):
 
 
 def Command_Import(file_name: str = "main"):
-    with get_io_file(file_name) as f:
-        api.looting.import_json(f.read())
-    print(f"Data ze souboru '{file_name}' byla načtena")
+    try:
+        with get_io_file(file_name, False) as f:
+            api.looting.import_json(f.read())
+    except FileNotFoundError:
+        rich_print(
+            f"Data nebyla načtena, jelikož soubor '{file_name}' neexistuje",
+            color="yellow",
+        )
+    else:
+        print(f"Data ze souboru '{file_name}' byla načtena")
 
 
 def Command_Config(namespace: dict[str, Any]):
@@ -663,6 +679,12 @@ def Command_Config(namespace: dict[str, Any]):
             )
         else:
             print("Žádná konfigurace není uložená")
+    elif cmd == "open":
+        dirname = os.path.dirname(CONFIG_FILE_PATH)
+        if not os.path.exists(dirname):
+            print("Nelze otevřít konfigurační složku, jelikož neexistuje")
+        else:
+            webbrowser.open(os.path.realpath(dirname))
 
 
 ##################################################
@@ -1342,6 +1364,10 @@ def prepare_shell():
     subparsers.add_parser(
         "check",
         help="Zobrazí údaje o uložené konfiguraci",
+    )
+    subparsers.add_parser(
+        "open",
+        help="Otevře konfigurační složku",
     )
     shell_instance.add_command(
         shell.Command(

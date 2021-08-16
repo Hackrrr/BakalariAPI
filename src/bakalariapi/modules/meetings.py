@@ -1,9 +1,10 @@
 """Modul obsahující funkce týkající se online schůzek."""
 import json
 from datetime import datetime
-
-from bs4 import BeautifulSoup, Tag
 from typing import cast
+
+from bs4 import BeautifulSoup
+from bs4.element import Tag  # Kvůli mypy - https://github.com/python/mypy/issues/10826
 
 from ..bakalari import BakalariAPI, Endpoint, _register_parser, _register_resolver
 from ..exceptions import BakalariQuerrySuccessError, MissingElementError
@@ -55,10 +56,10 @@ def parser_meetings_overview_html(
     output = ResultSet()
     if getter_output.data.head is None:
         raise MissingElementError("head")
-    scritps = cast(Tag, getter_output.data.head)("script")
+    scritps = cast(list[Tag], getter_output.data.head("script"))
     formated = ""
     for script in scritps:
-        formated = cast(Tag, script).prettify()
+        formated = script.prettify()
         if "var model = " in formated:
             break
     loot = {"Meetings": False, "Students": False}
@@ -105,9 +106,8 @@ def parser_meetings_info(getter_output: GetterOutput[dict]) -> ResultSet:
         )
     return ResultSet(
         Meeting(
-            str(
-                obj["data"]["Id"]
-            ),  # Actually je to int, ale všechny ostaní IDčka jsou string, takže se budeme tvářit že je string i tohle...
+            # Reálně je u schůzek "Id" číslo, ale všechny ostaní IDčka jsou string, takže se budeme tvářit že je string i tohle...
+            str(obj["data"]["Id"]),
             obj["data"]["OwnerId"],
             obj["data"]["Title"],
             obj["data"]["Details"],

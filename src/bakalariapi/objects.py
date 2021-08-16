@@ -4,20 +4,14 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
-from typing import Generic, Type, TypeVar
+from typing import Generic, TypeVar
 
 from bs4 import BeautifulSoup
 
 from .bakalari import BakalariAPI, Endpoint
+from .serialization import Serializable
 from .sessions import RequestsSession
-from .utils import (
-    T0,
-    Serializable,
-    bs_get_text,
-    cs_timedelta,
-    get_full_type_name,
-    resolve_string,
-)
+from .utils import T0, bs_get_text, cs_timedelta, get_full_type_name, resolve_string
 
 __all__ = [
     "ServerInfo",
@@ -85,7 +79,7 @@ class UserInfo:
         self.ID: str = userID
 
 
-class BakalariObject(Serializable, ABC):
+class BakalariObject(Serializable[dict], ABC):
     """Základní třída pro objekty parsované z Bakalářů (kromě tříd ServerInfo a UserInfo).
 
     Atributy:
@@ -111,10 +105,9 @@ class BakalariObject(Serializable, ABC):
         return dict(self.__dict__)
 
     @classmethod
-    def deserialize(cls: Type[T0], data: dict) -> T0:
+    def deserialize(cls: type[T0], data: dict) -> T0:
         # Postaveno na základě tohoto https://stackoverflow.com/a/2169191
-
-        obj = super().__new__(cls)
+        obj = super().__new__(cls)  # type: ignore # https://github.com/python/mypy/issues/9282
 
         for k, v in data.items():
             # if hasattr(obj, k): # Nebude fungovat, jelikož novoláme __init__, nýbrž pouze __new__ a tím pádem objekt nemá prakticky žádné atributy
@@ -134,9 +127,9 @@ class UnresolvedID(BakalariObject, Generic[BakalariObj]):
             Odhadovaný typ objektu, pro které je toto ID
     """
 
-    def __init__(self, ID: str, type_: Type[BakalariObj]):
+    def __init__(self, ID: str, type_: type[BakalariObj]):
         super().__init__(ID)
-        self.type: Type[BakalariObj] = type_
+        self.type: type[BakalariObj] = type_
 
     def format(self, rich_colors: bool = False) -> str:
         return f"Nevyřešené ID '{self.ID}'" + (
@@ -149,8 +142,10 @@ class UnresolvedID(BakalariObject, Generic[BakalariObj]):
         return output
 
     @classmethod
-    def deserialize(cls: Type[T0], data: dict) -> T0:
-        output = super().deserialize.__func__(cls, data)
+    def deserialize(cls: type[T0], data: dict) -> T0:  # type: ignore # Rád bych to odsoudil jako mypy bug, ale nemůžu nic najít
+        # Dle mého je tenhle "type: ignore" (↑) v pořádku, ale vážně nevím, protože jsem nenašel žádný issue v mypy
+        # repu, který by řešil (přímo) tento případ (Generic(/Protocol)->Non generic->Generic)
+        output = super().deserialize.__func__(cls, data)  # type: ignore # https://github.com/python/mypy/issues/9282
         output.type = resolve_string(data["type"])
         return output
 
@@ -417,7 +412,7 @@ class Student(BakalariObject):
         self.surname: str = surname
         self.class_: str = class_
 
-    def format(self) -> str:
+    def format(self, rich_colors: bool = False) -> str:
         return f"{self.ID}: {self.name} {self.surname} ({self.class_})"
 
 

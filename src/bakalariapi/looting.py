@@ -4,11 +4,11 @@ from __future__ import annotations
 import json
 import logging
 from threading import Lock
-from typing import Generic, Type, TypeVar, cast
+from typing import Generic, TypeVar, cast
 
 from bs4 import BeautifulSoup
 
-from . import objects, utils
+from . import objects, serialization
 from .bakalari import BakalariAPI
 from .objects import BakalariObj
 
@@ -43,14 +43,14 @@ class GetterOutput(Generic[GetterOutputTypeVar]):
     def __init__(self, endpoint: str, data: GetterOutputTypeVar):
         self.endpoint: str = endpoint
         self.data: GetterOutputTypeVar = data
-        self.type: Type[GetterOutputTypeVar] = type(data)
+        self.type: type[GetterOutputTypeVar] = type(data)
 
 
 class ResultSet:
     """Třída používaná jako "lightweight looting"."""
 
     def __init__(
-        self, loot: objects.BakalariObject | list[objects.BakalariObject] = None
+        self, loot: objects.BakalariObject | list[objects.BakalariObject] | None = None
     ):
         self.data: dict[str, list[objects.BakalariObject]] = {}
         if loot is not None:
@@ -71,7 +71,7 @@ class ResultSet:
             self.data.setdefault(type(o).__name__, []).append(o)
         return self
 
-    def get(self, type_: Type[BakalariObj]) -> list[BakalariObj]:
+    def get(self, type_: type[BakalariObj]) -> list[BakalariObj]:
         """Vrátí list objektů daného typu.
 
         Args:
@@ -83,6 +83,7 @@ class ResultSet:
         """
         t = type_.__name__
         if t in self.data:
+            # viz poznámka o `cast()` v "sessions.py"
             return cast(list[BakalariObj], self.data[t])
         return []
         # return self.data[t] if t in self.data else []
@@ -102,7 +103,7 @@ class ResultSet:
             self.data[t] = self.data.setdefault(t, []) + lst
         return self
 
-    def remove(self, type_: Type[objects.BakalariObject]) -> ResultSet:
+    def remove(self, type_: type[objects.BakalariObject]) -> ResultSet:
         """Odstraní z lootu daný typ objektů.
 
         Args:
@@ -187,7 +188,7 @@ class Looting:
         finally:
             self.__lock.release()
 
-    def get(self, type_: Type[BakalariObj]) -> list[BakalariObj]:
+    def get(self, type_: type[BakalariObj]) -> list[BakalariObj]:
         """Vrátí list objektů daného typu.
 
         Args:
@@ -198,13 +199,15 @@ class Looting:
             List objektů.
         """
         if type_ == objects.UnresolvedID:
+            # viz poznámka o `cast()` v "sessions.py"
             return cast(
                 list[BakalariObj], list(self.unresolved[type_.__name__].values())
             )
         try:
+            # viz poznámka o `cast()` v "sessions.py"
             return cast(
                 list[BakalariObj],
-                list(self.data.setdefault(type_.__name__, {}).values()),
+                list(self.data[type_.__name__].values()),
             )
         except AttributeError:
             return []
@@ -229,7 +232,7 @@ class Looting:
                 "data": self.data,
                 "unresolved": self.unresolved,
             },
-            cls=utils.JSONSerializer,
+            cls=serialization.JSONSerializer,
             *args,
             **kwargs,
         )
@@ -240,6 +243,8 @@ class Looting:
         Upozornění: Importovaní dat ze zdrojů, kterým nedůvěřujete, může být nebezpečné.
         Ačkoli je snaha o co největší bezpečnost, existuje zde bezpečnostní riziko.
         """
-        parsed = json.loads(json_string, cls=utils.JSONDeserializer, *args, **kwargs)
+        parsed = json.loads(
+            json_string, cls=serialization.JSONDeserializer, *args, **kwargs
+        )
         self.data = parsed["data"]
         self.unresolved = parsed["unresolved"]

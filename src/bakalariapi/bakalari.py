@@ -16,7 +16,7 @@ import logging
 import warnings
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Callable, Type, overload, Literal
+from typing import Any, Callable, Literal, overload
 
 import requests
 from bs4 import BeautifulSoup
@@ -46,7 +46,7 @@ class Endpoint:
     USER_INFO = "/next/osobni_udaje.aspx"
     HOMEWORKS = "/next/ukoly.aspx"
     HOMEWORKS_DONE = "/HomeWorks/MarkAsFinished"
-    _ENDPOINT_DICT = {}
+    _ENDPOINT_DICT: dict[str, str] = {}
 
 
 Endpoint._ENDPOINT_DICT = {
@@ -58,12 +58,12 @@ _parsers: dict[
     str, dict[Any, list[Callable[[looting.GetterOutput], looting.ResultSet]]]
 ] = {x: {} for x in Endpoint._ENDPOINT_DICT.values()}
 _resolvers: dict[
-    Type[BakalariObject],
+    type[BakalariObject],
     list[Callable[[BakalariAPI, UnresolvedID], BakalariObject | None]],
 ] = {}
 
 
-def _register_parser(endpoint: str, type_: Type[looting.GetterOutputTypeVar]):
+def _register_parser(endpoint: str, type_: type[looting.GetterOutputTypeVar]):
     """Dekorátor, který zaregistruje funkci jako parser pro daný endpoint.
 
     Pro běžné užití BakalářiAPI není doporučeno tento dekorátor používat.
@@ -89,7 +89,7 @@ def _register_parser(endpoint: str, type_: Type[looting.GetterOutputTypeVar]):
     return decorator
 
 
-def _register_resolver(type_: Type[BakalariObj]):
+def _register_resolver(type_: type[BakalariObj]):
     """Dekorátor, který zaregistruje funkci jako resolver pro daný typ.
 
     Pro běžné užití BakalářiAPI není doporučeno tento dekorátor používat.
@@ -434,6 +434,7 @@ class BakalariAPI:
             return (
                 self.get_grades(GetMode.FRESH, **kwargs) if len(output) == 0 else output
             )
+        raise ValueError
 
     def get_all_grades(self) -> list[Grade]:
         """Nově načte a vrátí všechny známky.
@@ -593,15 +594,13 @@ class BakalariAPI:
             if kwargs["fast_mode"]:
                 return self._parse(modules.homeworks.getter_fast(self)).get(Homework)
             else:
-                output = modules.homeworks.get_slow(
+                return modules.homeworks.get_slow(
                     self,
                     kwargs["unfinished_only"],
                     kwargs["only_first_page"],
                     kwargs["first_loading_timeout"],
                     kwargs["second_loading_timeout"],
-                )
-                self.looting.add_result_set(output)
-                return output.get(Homework)
+                ).get(Homework)
         elif mode == GetMode.CACHED_OR_FRESH:
             output = self.get_homeworks(GetMode.CACHED)
             return (
@@ -609,6 +608,7 @@ class BakalariAPI:
                 if len(output) == 0
                 else output
             )
+        raise ValueError
 
     def get_all_homeworks(self) -> list[Homework]:
         """Nově načte a vrátí všechny úkoly.
@@ -715,6 +715,7 @@ class BakalariAPI:
                 if len(output) == 0
                 else output
             )
+        raise ValueError
 
     def get_all_meetings(self) -> list[Meeting]:
         """Nově načte a vrátí všechny schůzky.
@@ -755,7 +756,7 @@ class BakalariAPI:
             Načtený list studentů.
         """
 
-    def get_students(self, mode: GetMode, **kwargs) -> list[Student]:
+    def get_students(self, mode: GetMode) -> list[Student]:
         if mode == GetMode.CACHED:
             return self.looting.get(Student)
         elif mode == GetMode.FRESH:
@@ -766,11 +767,8 @@ class BakalariAPI:
             )
         elif mode == GetMode.CACHED_OR_FRESH:
             output = self.get_students(GetMode.CACHED)
-            return (
-                self.get_students(GetMode.FRESH, **kwargs)
-                if len(output) == 0
-                else output
-            )
+            return self.get_students(GetMode.FRESH) if len(output) == 0 else output
+        raise ValueError
 
     # KOMENS
     @overload
@@ -863,6 +861,7 @@ class BakalariAPI:
             return (
                 self.get_komens(GetMode.FRESH, **kwargs) if len(output) == 0 else output
             )
+        raise ValueError
 
     def get_all_komens(self) -> list[Komens]:
         """Nově načte a vrátí všechny komens zprávy.
