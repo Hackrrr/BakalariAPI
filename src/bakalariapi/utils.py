@@ -230,7 +230,7 @@ def cookies_requests2webdriver(cookies: RequestsCookieJar) -> list[dict[str, Any
     ]
 
 
-def is_typed_dict(data_dict: dict, typed_dict: type[T0]) -> TypeGuard[T0]:
+def is_typed_dict(data_dict: Any, typed_dict: type[T0]) -> TypeGuard[T0]:
     # Měl by tu být i paramter "type_check: bool", ale jelikož `typing` modul nemá žádnou
     # metodu, která by ověřila správnost typu, tak by bylo potřeba napsat vlastní typechecker
     # a to není tak jednoduché, jak by se mohlo zdát LULW. Ano, zkusil jsem to, ale existuje
@@ -238,6 +238,8 @@ def is_typed_dict(data_dict: dict, typed_dict: type[T0]) -> TypeGuard[T0]:
     # Nakonec jsem ale usoudil, že za tu práci to (zatím) nestojí.
     # Nejsnadnější věc by byla vzít tenhle script: https://stackoverflow.com/a/55504010
     # nebo použít tohle: https://github.com/agronholm/typeguard; https://stackoverflow.com/a/65735336
+    if not isinstance(data_dict, dict):
+        return False
     if len(data_dict) != len(typed_dict.__annotations__):
         return False
     for name, type_ in typed_dict.__annotations__.items():

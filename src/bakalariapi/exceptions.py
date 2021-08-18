@@ -50,13 +50,13 @@ class MissingSerializer(BakalariAPIError):
     """
 
 
+class MissingDeserializer(BakalariAPIWarning):
+    """Výjimka, která nastane při pokusu o deserilializaci dat, které vypadají, že by se dali deserializovat, ale není pro ně registrovaný deserializer."""
+
+
 ### WARNING ###
 class VersionMismatchWarning(BakalariAPIWarning):
     """Varování, které nastane při neshodě verze Bakalářů a `LAST_SUPPORTED_VERSION`.
 
     Toto varování se může ignorovat, jelikož ve většině případů se nic závažného neděje avšak `BakalářiAPI` může být nestabilní.
     """
-
-
-class MissingDeserializer(BakalariAPIWarning):
-    """Varování, které nastane při pokusu o deserilializaci dat, které vypadají, že by se dali deserializovat, ale není pro ně registrovaný deserializer."""

@@ -24,9 +24,6 @@ from prompt_toolkit.input import create_input
 from prompt_toolkit.key_binding import KeyPress
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.shortcuts.progress_bar import ProgressBar, ProgressBarCounter
-
-# Import kvůli tomu, aby jsme mohli volat rovnou 'inspect()' v python execu ze shellu
-from rich import inspect
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.syntax import Syntax
@@ -1184,12 +1181,15 @@ def prepare_shell():
     global shell_instance
     predefined_commands = [x for x in shell.ShellPredefinedCommands]
     predefined_commands.remove(shell.ShellPredefinedCommands.EXIT)
+    _globals = globals()
+    _globals["p"] = rich_print
+    _globals["i"] = rich.inspect
     shell_instance = shell.Shell(
         # prompt="[bright_green]BakalariAPI Shell[/bright_green][yellow]>[/yellow]",
         prompt="BakalariAPI Shell>",
         allow_python_exec=True,
         python_exec_prefix=" ",
-        python_exec_globals=globals(),
+        python_exec_globals=_globals,
         python_exec_locals=locals(),
         predefined_commands=predefined_commands,
         command_exception_traceback=True,
