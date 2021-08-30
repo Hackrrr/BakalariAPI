@@ -5,9 +5,8 @@ from __future__ import annotations
 import logging
 import sys
 from datetime import datetime, timedelta
-from typing import Any, TypeVar, cast
+from typing import Any, TypeVar, cast, get_args
 
-# from bs4 import Tag
 from bs4.element import Tag  # Kvůli mypy - https://github.com/python/mypy/issues/10826
 from requests.cookies import RequestsCookieJar
 from selenium.webdriver.remote.webdriver import WebDriver
@@ -248,3 +247,7 @@ def is_typed_dict(data_dict: Any, typed_dict: type[T0]) -> TypeGuard[T0]:
         # if type_check and not check_type(data_dict[name], type_):
         #     return False
     return True
+
+
+def is_union(obj, union: type[T0]) -> TypeGuard[T0]:
+    return isinstance(obj, get_args(union))

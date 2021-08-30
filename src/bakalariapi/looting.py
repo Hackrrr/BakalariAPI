@@ -209,7 +209,7 @@ class Looting:
                 list[BakalariObj],
                 list(self.data[type_.__name__].values()),
             )
-        except AttributeError:
+        except KeyError:
             return []
 
     def resolve_unresolved(self, bakalariAPI: BakalariAPI):
@@ -228,11 +228,12 @@ class Looting:
     def export_json(self, *args, **kwargs):
         """Exportuje jako JSON data."""
         return json.dumps(
-            {
-                "data": self.data,
-                "unresolved": self.unresolved,
-            },
-            cls=serialization.JSONSerializer,
+            serialization.complex_serialize(
+                {
+                    "data": self.data,
+                    "unresolved": self.unresolved,
+                }
+            ),
             *args,
             **kwargs,
         )
@@ -243,8 +244,6 @@ class Looting:
         Upozornění: Importovaní dat ze zdrojů, kterým nedůvěřujete, může být nebezpečné.
         Ačkoli je snaha o co největší bezpečnost, existuje zde bezpečnostní riziko.
         """
-        parsed = json.loads(
-            json_string, cls=serialization.JSONDeserializer, *args, **kwargs
-        )
+        parsed = serialization.deserialize(json.loads(json_string, *args, **kwargs))
         self.data = parsed["data"]
         self.unresolved = parsed["unresolved"]

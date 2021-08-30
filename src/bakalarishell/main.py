@@ -693,17 +693,19 @@ def RunTest(ID: int):
     m = __import__(__name__)
     t = f"Test{ID}"
     if hasattr(m, t):
-        print(f"Zahajuji test {ID}")
+        rich_print(f"Zahajuji test {ID}")
         try:
             o = getattr(m, t)()
-            print(
-                f"Test {ID} skončil" + ("" if o is None else f"; Výsledek testu je {o}")
+            rich_print(
+                f"Test {ID} skončil" + ("" if o is None else "; Výsledek testu:")
             )
+            if o is not None:
+                rich_print(o)
         except:
-            print("Test skončil neúspěchem:")
+            rich_print("Test skončil neúspěchem:", color="red")
             traceback.print_exc()
     else:
-        print(f"Test {ID} nenalezen")
+        rich_print(f"Test {ID} nenalezen", color="red")
 
 
 def Test0():
