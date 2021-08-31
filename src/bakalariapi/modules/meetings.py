@@ -9,7 +9,13 @@ from bs4.element import Tag  # Kvůli mypy - https://github.com/python/mypy/issu
 from ..bakalari import BakalariAPI, Endpoint, _register_parser, _register_resolver
 from ..exceptions import BakalariQuerrySuccessError, MissingElementError
 from ..looting import GetterOutput, ResultSet
-from ..objects import Meeting, MeetingProvider, Student, UnresolvedID
+from ..objects import (
+    Meeting,
+    MeetingParticipant,
+    MeetingProvider,
+    Student,
+    UnresolvedID,
+)
 from ..sessions import RequestsSession
 from ..utils import line_iterator
 
@@ -104,6 +110,16 @@ def parser_meetings_info(getter_output: GetterOutput[dict]) -> ResultSet:
         raise BakalariQuerrySuccessError(
             "Dotaz na endpoint MEETINGS_INFO skončil neúspěchem - schůzka byla v minulosti vytvořena ale pravděpodobně nebyla správně vymazána"
         )
+    participants: dict[str, MeetingParticipant] = {}
+    for p in obj["data"]["Participants"]:
+        participants[p["PersonId"]] = MeetingParticipant(
+            p["PersonID"], p["PersonName"], None
+        )
+    for p in obj["data"]["ParticipantsListOfRead"]:
+        participants[p["PersonId"]].read_time = datetime.strptime(
+            p["Readed"][: -(len(p["Readed"]) - p["Readed"].rfind("."))],
+            "%Y-%m-%dT%H:%M:%S",
+        )
     return ResultSet(
         Meeting(
             # Reálně je u schůzek "Id" číslo, ale všechny ostaní IDčka jsou string, takže se budeme tvářit že je string i tohle...
@@ -114,17 +130,7 @@ def parser_meetings_info(getter_output: GetterOutput[dict]) -> ResultSet:
             datetime.strptime(obj["data"]["MeetingStart"], "%Y-%m-%dT%H:%M:%S%z"),
             datetime.strptime(obj["data"]["MeetingEnd"], "%Y-%m-%dT%H:%M:%S%z"),
             obj["data"]["JoinMeetingUrl"],
-            [(s["PersonId"], s["PersonName"]) for s in obj["data"]["Participants"]],
-            [
-                (
-                    s["PersonId"],
-                    datetime.strptime(
-                        s["Readed"][: -(len(s["Readed"]) - s["Readed"].rfind("."))],
-                        "%Y-%m-%dT%H:%M:%S",
-                    ),
-                )
-                for s in obj["data"]["ParticipantsListOfRead"]
-            ],
+            participants,
             MeetingProvider.BY_ID[int(obj["data"]["MeetingProviderId"])],
         )
     )

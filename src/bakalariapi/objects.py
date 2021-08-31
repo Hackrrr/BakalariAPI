@@ -9,7 +9,7 @@ from typing import Generic, TypeVar
 from bs4 import BeautifulSoup
 
 from .bakalari import BakalariAPI, Endpoint
-from .serialization import Serializable
+from .serialization import Serializable, SimpleSerializable
 from .sessions import RequestsSession
 from .utils import T0, bs_get_text, cs_timedelta, get_full_type_name, resolve_string
 
@@ -79,7 +79,7 @@ class UserInfo:
         self.ID: str = userID
 
 
-class BakalariObject(Serializable[dict], ABC):
+class BakalariObject(SimpleSerializable, ABC):
     """Základní třída pro objekty parsované z Bakalářů (kromě tříd ServerInfo a UserInfo).
 
     Atributy:
@@ -100,19 +100,6 @@ class BakalariObject(Serializable[dict], ABC):
                 Indikuje, zda ve výsledném textu mají být zahnuty "tagy" barev (pro `rich` modul).
                 Pokud `True`, "tagy" budou přítomny, jinak ne.
         """
-
-    def serialize(self) -> dict:
-        return dict(self.__dict__)
-
-    @classmethod
-    def deserialize(cls: type[T0], data: dict) -> T0:
-        # Postaveno na základě tohoto https://stackoverflow.com/a/2169191
-        obj = super().__new__(cls)  # type: ignore # https://github.com/python/mypy/issues/9282
-
-        for k, v in data.items():
-            # if hasattr(obj, k): # Nebude fungovat, jelikož novoláme __init__, nýbrž pouze __new__ a tím pádem objekt nemá prakticky žádné atributy
-            setattr(obj, k, v)
-        return obj
 
 
 BakalariObj = TypeVar("BakalariObj", bound=BakalariObject)
@@ -330,6 +317,15 @@ MeetingProvider(1, "Microsoft", "Microsoft Office 365 for Education")
 MeetingProvider(2, "Google", "Google Meet")
 
 
+class MeetingParticipant(SimpleSerializable):
+    def __init__(
+        self, participantID: str, name: str, read_time: datetime | None
+    ) -> None:
+        self.participantID: str = participantID
+        self.name: str = name
+        self.read_time: datetime | None = read_time
+
+
 class Meeting(BakalariObject):
     """Třída/objekt držící informace o známkách/klasifikaci.
 
@@ -345,8 +341,7 @@ class Meeting(BakalariObject):
         start_time: datetime,
         end_time: datetime,
         join_url: str,
-        participants: list[tuple[str, str]],
-        participants_read_info: list[tuple[str, datetime]],
+        participants: dict[str, MeetingParticipant] | list[MeetingParticipant],
         provider: MeetingProvider,
     ):
         super().__init__(ID)
@@ -356,19 +351,18 @@ class Meeting(BakalariObject):
         self.start_time: datetime = start_time
         self.end_time: datetime = end_time
         self.join_url: str = join_url
-        self.participants: list[tuple[str, str]] = participants  # ID, (Celé) Jméno
-        self.participants_read_info: list[
-            tuple[str, datetime]
-        ] = participants_read_info  # ID, Čas přečtení
+        # ID <-> Participant
+        self.participants: dict[str, MeetingParticipant] = (
+            {p.participantID: p for p in participants}
+            if isinstance(participants, list)
+            else participants
+        )
         self.provider: MeetingProvider = provider
-
-    @property
-    def owner_name(self) -> str:
-        """Jméno pořadatele schůzky."""
-        for participant in self.participants:
-            if participant[0] == self.ownerID:
-                return participant[1]
-        return ""
+        self.owner = (
+            self.participants[self.ownerID]
+            if self.ownerID in self.participants
+            else None
+        )
 
     @property
     def start_time_delta(self) -> timedelta:
@@ -378,6 +372,11 @@ class Meeting(BakalariObject):
     @property
     def is_before_start(self) -> bool:
         return datetime.now(timezone.utc).astimezone() < self.start_time
+
+    def read_by(self):
+        for participant in self.participants.values():
+            if participant.read_time is not None:
+                yield participant
 
     def format(self, rich_colors: bool = False) -> str:
         delta = self.start_time_delta
@@ -392,12 +391,13 @@ class Meeting(BakalariObject):
                 color = "green"
         return (
             f"ID: {self.ID}\n"
-            f"Pořadatel: {self.owner_name}\n"
+            f"Pořadatel: {('[bright_black]Neznámý[/bright_black]' if rich_colors else 'Neznámý') if self.owner is None else self.owner.name}\n"
             f"Začátek: {('[' + color + ']') if rich_colors else ''}{self.start_time.strftime('%H:%M, %d. %m. %Y')}{(' (' + cs_timedelta(delta, 'dhm') + ' do začátku)') if delta > timedelta(0) else (' (začíná nyní)' if delta == timedelta(0) else '')}{('[/' + color + ']') if rich_colors else ''}\n"
             f"Konec:   {self.end_time.strftime('%H:%M, %d. %m. %Y')}\n"
             f"Poskytovatel schůzky: {self.provider.label}\n"
             f"URL na připojení: {self.join_url}\n"
             f"Název: {self.name.strip()}\n"
+            f"Počet osob, které viděli pozvánku: {len(list(self.read_by()))}/{len(self.participants)}\n"
             "\n"
             f"{bs_get_text(BeautifulSoup(self.content, 'html.parser'))}"
         )

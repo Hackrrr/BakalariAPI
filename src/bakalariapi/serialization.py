@@ -94,6 +94,21 @@ class Serializable(Protocol[TRawSerializableValue]):
         raise NotImplementedError()
 
 
+class SimpleSerializable(Serializable[dict]):
+    def serialize(self) -> dict:
+        return dict(self.__dict__)
+
+    @classmethod
+    def deserialize(cls: type[T0], data: dict) -> T0:
+        # Postaveno na základě tohoto https://stackoverflow.com/a/2169191
+        obj = super().__new__(cls)  # type: ignore # https://github.com/python/mypy/issues/9282
+
+        for k, v in data.items():
+            # if hasattr(obj, k): # Nebude fungovat, jelikož nevoláme __init__, nýbrž pouze __new__ a tím pádem objekt nemá prakticky žádné atributy
+            setattr(obj, k, v)
+        return obj
+
+
 @overload
 def serialize(obj: TSerializablePrimitive) -> TSerializablePrimitive:
     ...
