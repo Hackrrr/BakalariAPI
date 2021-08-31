@@ -3,7 +3,19 @@ Všechny důležité změny v tomto projektu budou zdokumentovány v tomto soubo
 
 Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) a podléhá [Sémantickému verzování](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] ([3.0.0])
+## [Unreleased] ([3.x])
+
+## [3.0.0] - 31. 8. 2021
+
+Další major verze je tu! Kompletní (alespoň doufám) seznam změn je níže, ale pokud chceš vědět jen hlavní věci, tak tady máš souhrn:
+- **`bakalariapi`**
+  - Partial init mód - Nyní lze vytvořit `BakalariAPI` instanci bez parametrů a posléze s ní operovat. Takže nyní se nikdo nemusí zabývat nějakým "nastavovánín" `BakalariAPI` jen proto, aby mohl udělat `.looting.import_json()` a `.get_komens(GetMode.CACHED)`.
+  - Sessiony jako kontextový manažeři - Automatické obstarání `busy` flagy při použití `with session as s: ...`.
+  - Serializace - Nový přístup k serializaci přes registraci serializérů a nový formát serializace, který podporuje reference na jeden objekt z více míst (`serialization.complex_serialize()`)
+- **`bakalarishell`**
+  - Globální uložení konfigurace - Už není nutnost pokaždé psát parametry aby se spustil shell. Stačí pouze jednou a konfiguraci ve spuštěném shellu následně uložit `"config save"` a příště se automaticky načte tato konfigurace. S tím také přichází nová flaga `-d`, která deaktivuje načtení této konfigurace.
+  - "Multi-command" podpora - Nyní lze napsat více příkazů najednou, např. `"komens;schuzky"`. Spolu s tímto je zde nový parametr `-c "příkaz"`, který spustí daný příkaz po startu shellu.
+  - Barvičky
 
 ### Added
 - Přidána podpora kontextový manažerů pro sessiony - pokud se session použije jakožto kontextový manažer (`with` keyword), automaticky se při vnoření do kontextru nastaví `busy` flag a při opuštění kontextu se vymaže
@@ -13,7 +25,9 @@ Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 - Přidán příkaz "config" do `bakalarishell`, který umožňuje práci s konfigurací (uložení, zobrazení, smazání)
 - Přidán parametr `-d`/`--disable-config` pro `bakalarishell`, který zakazuje import uložené konfigurace
 - Přidán parametr `-c`/`--command` pro `bakalarishell`, kterým lze spustit příkazy po startu
-<!-- - Přidán parametr `rich_prompt` do `bakalarishell.shell.Shell`, kterým lze formátovat `.prompt` přes `rich` modul -->
+- Nový submodul `serialization`, který obsahuje všechny věci ohledně (de)serializace
+- Přidána možnost regitrovat (de)serializéry pro typy, které nemají vlastní implementaci serializace
+- Vytvořen nový formát serializace - serializovat pomocí něj lze skrze `serialization.complex_serialize()`
 
 ### Changed
 - Definice `JSONEncoder` a `JSONDecoder` byly přesunuty z modulu `looting.Looting` do modulu `utils` a přejmenovány na `JSONSerializer` a `JSONDeserializer` a přesunuta a přejmenována i `logger` instance (z `bakalariapi.looting.serializer` na `bakalariapi.utils.serializer`)
@@ -29,6 +43,7 @@ Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 ### Removed
 - Odstraněn "přímý" export `bakalariapi.LAST_SUPPORTED_VERSION`, jelikož již není potřeba pro běžné užití (avšak stále je přístupný skrz `bakalariapi.bakalari.LAST_SUPPORTED_VERSION`)
 - Odstraněn parametr `-f`/`--file` pro `bakalarishell`, jelikož po zprovoznění nového systému importu/exportu již není za potřebý
+- Odstraněny třídy `JSONEncoder` a `JSONDecoder`, jejich funkcionalita byla nahrazena `serialization` modulem
 
 ### Fixed
 - Opravany údaje o verzi v instalační konfiguraci a v `bakalariapi`
@@ -36,6 +51,9 @@ Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 - Opravena deserializace offset-aware datetime instancí (časové údaje v `objects.Meeting`)
 - Konečně správný zápis typehintigu pro třídu `BakalariAPI` (za pomoci `typing.Literal`)
 - Opraveny defaultní mutující hodnoty
+
+### Deprecated
+- Data, která byla serilizována staršími verzemi nebudou v další verzích podporována - stará data nutno deserializovat a opětovně serializovat (stará verze se detekuje automaticky)
 
 ## [2.1.0] - 2021-06-26
 
