@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 from bs4 import BeautifulSoup
 
 from .bakalari import BakalariAPI, Endpoint
-from .serialization import Serializable, SimpleSerializable
+from .serialization import Serializable, SimpleSerializable, Upgradeable
 from .sessions import RequestsSession
 from .utils import T0, bs_get_text, cs_timedelta, get_full_type_name, resolve_string
 
@@ -326,10 +326,23 @@ class MeetingParticipant(SimpleSerializable):
         self.read_time: datetime | None = read_time
 
 
-class Meeting(BakalariObject):
+class Meeting(Upgradeable, BakalariObject):
     """Třída/objekt držící informace o známkách/klasifikaci.
 
     Datetime instance v této tříde jsou offset-aware."""
+
+    _attributes = {
+        "ID",
+        "ownerID",
+        "name",
+        "content",
+        "start_time",
+        "end_time",
+        "join_url",
+        "participants",
+        "provider",
+        "owner",
+    }
 
     def __init__(
         self,
@@ -358,7 +371,7 @@ class Meeting(BakalariObject):
             else participants
         )
         self.provider: MeetingProvider = provider
-        self.owner = (
+        self.owner: MeetingParticipant | None = (
             self.participants[self.ownerID]
             if self.ownerID in self.participants
             else None
@@ -401,6 +414,37 @@ class Meeting(BakalariObject):
             "\n"
             f"{bs_get_text(BeautifulSoup(self.content, 'html.parser'))}"
         )
+
+    @classmethod
+    def upgrade(
+        cls,
+        data: dict[str, Any],
+        missing_attributes: set[str],
+        redundant_attributes: set[str],
+    ) -> dict[str, Any]:
+        # Data z verze před 3.0
+        if (
+            "owner" in missing_attributes
+            and "participants_read_info" in redundant_attributes
+        ):
+            # Chybějící "owner", přebývající "participants_read_info",
+            # "participants" je `list` namísto `dict` a nejsou zde `MeetingParticipant` instance
+            participants: dict[str, MeetingParticipant] = {}
+            for participant in data["participants"]:
+                participants[participant[0]] = MeetingParticipant(
+                    participant[0], participant[1], None
+                )
+            for participant in data["participants_read_info"]:
+                participants[participant[0]].read_time = participant[1]
+
+            del data["participants_read_info"]
+            data["participants"] = participants
+            data["owner"] = (
+                participants[data["ownerID"]]
+                if data["ownerID"] in participants
+                else None
+            )
+        return data
 
 
 class Student(BakalariObject):

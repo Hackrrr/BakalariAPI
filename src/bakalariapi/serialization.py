@@ -27,7 +27,14 @@ from typing import (
 )
 
 from . import exceptions
-from .utils import T0, get_full_type_name, is_typed_dict, is_union, resolve_string
+from .utils import (
+    T0,
+    _CustomChecks,
+    get_full_type_name,
+    is_typed_dict,
+    is_union,
+    resolve_string,
+)
 
 LOGGER = logging.getLogger("bakalariapi.serialization")
 
@@ -94,14 +101,40 @@ class Serializable(Protocol[TRawSerializableValue]):
         raise NotImplementedError()
 
 
-class SimpleSerializable(Serializable[dict]):
-    def serialize(self) -> dict:
+@runtime_checkable
+class Upgradeable(Protocol, metaclass=_CustomChecks):
+    _attributes: set[str]
+
+    @classmethod
+    def upgrade(
+        cls,
+        data: dict[str, Any],
+        missing_attributes: set[str],
+        redundant_attributes: set[str],
+    ) -> dict[str, Any]:
+        raise NotImplementedError()
+
+    @classmethod
+    def __subclasscheck__(cls, subclass):
+        return hasattr(subclass, "_attributes") and hasattr(subclass, "upgrade")
+
+
+class SimpleSerializable(Serializable[dict[str, Any]]):
+    def serialize(self) -> dict[str, Any]:
         return dict(self.__dict__)
 
     @classmethod
-    def deserialize(cls: type[T0], data: dict) -> T0:
+    def deserialize(cls: type[T0], data: dict[str, Any]) -> T0:
         # Postaveno na základě tohoto https://stackoverflow.com/a/2169191
         obj = super().__new__(cls)  # type: ignore # https://github.com/python/mypy/issues/9282
+
+        if issubclass(cls, Upgradeable):
+            actual = set(data.keys())
+
+            missing = cls._attributes - actual
+            redundant = actual - cls._attributes
+
+            data = cls.upgrade(data, missing, redundant)
 
         for k, v in data.items():
             # if hasattr(obj, k): # Nebude fungovat, jelikož nevoláme __init__, nýbrž pouze __new__ a tím pádem objekt nemá prakticky žádné atributy

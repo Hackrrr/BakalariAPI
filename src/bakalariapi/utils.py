@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import sys
 from datetime import datetime, timedelta
+from typing import _ProtocolMeta  # type: ignore
 from typing import Any, TypeVar, cast, get_args
 
 from bs4.element import Tag  # Kvůli mypy - https://github.com/python/mypy/issues/10826
@@ -251,3 +252,79 @@ def is_typed_dict(data_dict: Any, typed_dict: type[T0]) -> TypeGuard[T0]:
 
 def is_union(obj, union: type[T0]) -> TypeGuard[T0]:
     return isinstance(obj, get_args(union))
+
+
+# Vítejte u další epizody "Hackujeme Python, protože opět potřebujeme
+# udělat něco, co nikdo nepřepodkládal, že by někdo mohl chtít dělat...".
+# Dnes nás čeká hraní si s metatřídami... Ano, to je ta věc v Pythonu,
+# na kterou se opravdu nemá šahat. "Pokud nevíš, jestli potřebuješ
+# metatřídy, tak je nepotřebuješ". Naneštěstí my je tentokrát potřebujeme,
+# jelikož v chceme, aby si jednotlivé třídy mohli definovat vlastní
+# `__instancecheck__()` a `__subclasscheck__()`, který z nějakého zvláštního
+# důvodu lze definovat pouze na metatřídě (IDK, tak je to v dokumentaci).
+#
+# Nejdříve umožníme implementaci `__instancecheck__()` a `__subclasscheck__()`
+# ze tříd, které budou mít tuto třídu jako metatřídu. To uděláme tak, že
+# v "našich" `__instancecheck__()` a `__subclasscheck__()` definicích
+# zkontrolujeme, zda daná třída implementuje danou metodu - pokud ano, použijeme
+# tu, pokud ne, necháme to na originální implementaci (tzn. implementace z
+# `type` (meta)třídy).
+# Krok číslo jedna hotov. Problém je, že pokud použijeme u naší třídy
+# `_CustomChecks` jako base třídu `type`, tak pokud následně nějaká třída
+# bude chtít použít `_CustomChecks` jako metatřídu a zároveň bude derivovat
+# ze třídy, která bude používat jako metatřídu něco jiného, tak je problém,
+# jelikož `_CustomChecks` nebude subtřída všech metatříd v definici třídy,
+# což vyustí v `TypeError`. Srozumitelněji:
+#   class MetaA(type): ...
+#   class MetaB(type): ...
+#   class A(metaclass=MetaA): ...
+#   class B(metaclass=MetaB): ...
+#   class D(A, B): ...
+# Definice `D` bude mít za následek `TypeError`, protože defaulntní metatřída
+# `type` není subtřídou `MetaA` a `MetaB` (alespoň tak to chápu já). Řešení?
+# Vytvořit novou třídu, která derivuje ze všech metatříd, které použivají
+# třídy, ze kterých chceme derivovat. Tzn.:
+#   class MetaA(type): ...
+#   class MetaB(type): ...
+#   class A(metaclass=MetaA): ...
+#   class B(metaclass=MetaB): ...
+#   class MetaAB(MetaA, MetaB): ...
+#   class D(A, B, metaclass=MetaAB): ...
+# Ale co když máme X tříd, které pokaždé derivují z jiných tříd, které mají
+# vlastní metatřídy? Tak ano, muselo by se vytvořit X metatříd, které derivují
+# z daných (meta)tříd. A nebo udělat nějaký hack jako je tohle:
+#   https://stackoverflow.com/questions/4651729/metaclass-mixin-or-chaining
+# Proč to teda nepoužiji? Jelikož je to věc z roku 2011, tak je to Python 2.x
+# a upgradovat se mi to nechce. Takže co s tím? Nic. eShrug Tenhle problém je
+# nevyřešený. Jediné, co můžeme udělat je derivovat nejčastější metatřídě, co
+# se bude potkávat a to jest `abc.ABCMeta`, což mimochodem i udělá z naší třídy
+# abstraktní třídu, takže takový bonus navíc.
+# That's all folks! To byl dnešní díl vašeho oblíbeného seriálu rozbíjení
+# v Pythonu a budeme se na vás těštit v další epizodě.
+# Pozn.: Tady používám `_ProtocolMeta`, jelikož to je metatřída pro `Protocol`,
+# tudíž lze použít `_CustomChecks` jako metatřídu, když se derivuje
+# z `Protocol`. `_ProtocolMeta` derivuje z `abc.ABCMeta`, takže `_CustomChecks`
+# zůstává stále jako abstraktní třída.
+
+
+class _CustomChecks(_ProtocolMeta):
+    """Použití:
+    ```
+    class MojeTrida(metaclass=_CustomChecks):
+        @classmethod
+        def __instancecheck__(self, instance: Any) -> bool:
+            ...
+    ```
+    """
+
+    def __instancecheck__(self, instance: Any) -> bool:
+        if type(type(instance)) is _CustomChecks and hasattr(
+            type(instance), "__instancecheck__"
+        ):
+            return type(instance).__instancecheck__(instance)  # type: ignore # "__instancecheck__" neexsituje :)
+        return type.__instancecheck__(self, instance)
+
+    def __subclasscheck__(self, subclass: type) -> bool:
+        if type(subclass) is _CustomChecks and hasattr(subclass, "__subclasscheck__"):
+            return subclass.__subclasscheck__(subclass)  # type: ignore # "__subclasscheck__" neexsituje :)
+        return type.__subclasscheck__(self, subclass)
