@@ -402,23 +402,44 @@ def complex_deserialize(data: SerializedData) -> Any:
     last_unresolved: list[tuple[int, int]] = []
     while True:
         current_unresolved: list[tuple[int, int]] = []
-        is_something_none = False
+        is_everything_resolved = True
         for index, obj in enumerate(original_obj_list):
             if real_obj_list[index] is None:
                 try:
                     deserialized = recursion(obj["data"])
                 except NotDeserializedYet as e:
-                    is_something_none = True
+                    is_everything_resolved = False
                     current_unresolved.append((index, e.ref_id))
                 else:
                     real_obj_list[index] = deserialize(
                         {"__type__": obj["__type__"], "data": deserialized}, False
                     )
-        if not is_something_none:
+        if is_everything_resolved:
             break
         if current_unresolved == last_unresolved:
             # TODO: Podpora rekurze
-            raise Exception("Detekována rekurze při deserializaci")
+            # Ok, tohle je o dost složitější, než jsem čekal... A ano, čekal jsem
+            # to dost složité, ale ukazuje se, že toho je trochu víc, takže tuhle
+            # featuru prozatím odkládám.
+            # Až se jednou rozhodnu konečně tohle zprovoznit, tak to pravděpodobně
+            # bude nějak takto:
+            #   SerializableRecusion(Serializable):
+            #       @classmethod
+            #       def early_deserialization(cls, serialized: RawSerializedData, unresolved_obj: RawSerializedData) -> RawSerializedData: ...
+            #       def late_deserialization(self: T0, unresolved_obj: RawSerializedData, resolved_obj: object) -> T0: ...
+            # Kde:
+            #   `serialized@early_deserialization` je ten daný objekt, který se snažíme deserializovat,
+            #   `unresolved_obj@early_deserialization` je nedeserializovaný objekt, na který tento objekt odkazuje,
+            #   `early_deserialization` vrací upravený `serialized@early_deserialization`, který lze potencionálně hodit do `deserialize`,
+            #   `unresolved_obj@late_deserialization` je stejný objekt jako `unresolved_obj@early_deserialization`,
+            #   `resolved_obj@late_deserialization` je deserializaovaný `unresolved_obj@late_deserialization`,
+            #   a kde `late_deserialization` vrací upravený deserializovaný objekt                  .
+            # Takhle je načrtnuto budoucí API, ale jelikož nemám žádný objekt,
+            # u kterého bych potřeboval deserializovat rekurzi, tak nevím,
+            # jestli je takového API vhodné a v tuto chvíli je tedy pro mě tato
+            # featura s nízkou prioritou. (Navíc mám tušení, že se něco extrémně
+            # pokazí (jako vždy) a nebude to tak pěkné, jak jsem tady načrtl.)
+            raise RecursionError("Detekována rekurze při deserializaci")
         else:
             last_unresolved = current_unresolved
             LOGGER.debug(
@@ -435,3 +456,5 @@ def complex_deserialize(data: SerializedData) -> Any:
 register(datetime, lambda x: x.isoformat(), datetime.fromisoformat)
 # tuple
 register(tuple, list, tuple)
+# set
+register(set, list, set)
