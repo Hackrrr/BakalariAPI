@@ -28,7 +28,12 @@ __all__ = [
     "Command",
     "ShellPredefinedCommands",
     "Shell",
+    "DummyShellError",
 ]
+
+
+class DummyShellError(Exception):
+    pass
 
 
 def cls():
@@ -209,6 +214,7 @@ class Shell:
         enable_copy: bool = True,  # TODO: Make this work
         enable_paste: bool = True,  # TODO: Make this work,
         # rich_prompt: bool = False,
+        dummy_shell: bool = False,
     ):
         self.prompt: str = prompt
         self.commands: dict[CommandEntryPriority, dict[str, CommandEntry]] = {
@@ -246,21 +252,23 @@ class Shell:
             # co za parametry tam ještě musí být, aby to fungovalo tak jak má eShrug (A navíc je dost možný
             # že se tím nějak úplně zničí terminál)
 
-        bindings = KeyBindings()
-        if enable_paste:
+        self.IS_DUMMY_SHELL = dummy_shell
+        if not dummy_shell:
+            bindings = KeyBindings()
+            if enable_paste:
 
-            @bindings.add("c-v")
-            def _(event: KeyPressEvent):
-                # event.current_buffer.document.paste_clipboard_data()
-                ...
+                @bindings.add("c-v")
+                def _(event: KeyPressEvent):
+                    # event.current_buffer.document.paste_clipboard_data()
+                    ...
 
-        self._promt_session: PromptSession = PromptSession(
-            history=None if history else DummyHistory(),
-            auto_suggest=AutoSuggestFromHistory() if history_suggestions else None,
-            completer=ShellCompleter(self) if autocomplete else None,
-            complete_while_typing=False,
-            # reserve_space_for_menu=0
-        )
+            self._promt_session: PromptSession = PromptSession(
+                history=None if history else DummyHistory(),
+                auto_suggest=AutoSuggestFromHistory() if history_suggestions else None,
+                completer=ShellCompleter(self) if autocomplete else None,
+                complete_while_typing=False,
+                # reserve_space_for_menu=0
+            )
 
         self._should_exit: bool = False
         self._running: bool = False
@@ -395,6 +403,8 @@ class Shell:
             }
 
     def start_loop(self):
+        if self.IS_DUMMY_SHELL:
+            raise DummyShellError
         self._sort_commands()
         self._running = True
         try:

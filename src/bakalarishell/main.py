@@ -1176,7 +1176,7 @@ def main():
 
     try:
         shell_instance.start_loop()
-    except KeyboardInterrupt:
+    except (shell.DummyShellError, KeyboardInterrupt):
         Command_Konec(False)
 
 
@@ -1200,6 +1200,7 @@ def prepare_shell():
         command_exception_reraise=False,
         raise_on_ctrlc=True,
         end_on_ctrlc=True,
+        dummy_shell="exit" in args.commands,
     )
     parser_fresh = shell.ShellArgumentParser(add_help=False)
     parser_fresh.add_argument(

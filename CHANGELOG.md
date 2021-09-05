@@ -5,6 +5,9 @@ Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ## [Unreleased] ([3.x])
 
+### Added
+- Přidána možnost vytvořit `bakalarishell.shell.Shell` instanci jako "dummy shell" - takováto instance nevytváří interaktivní elementy, není možné na ní volat `.start_loop()` (jinak nastane nový exception `bakalarishell.shell.DummyShellError`) a prakticky je ji možné využít pouze jako "dispatch" ovládaný přes metodu `.proc_string`. Pokud je při spouštění shellu přítomný argument "-c exit", shell se spustí v tomto "dummy" módu (vhodné pro testování).
+
 ### Fixed
 - Opravena chyba při spouštění `bakalarishell` s `-c`/`--command` argumentem
 
