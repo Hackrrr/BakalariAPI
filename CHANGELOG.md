@@ -5,6 +5,9 @@ Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ## [Unreleased] ([3.x])
 
+### Fixed
+- Opravena chyba při spouštění `bakalarishell` s `-c`/`--command` argumentem
+
 ## [3.0.0] - 31. 8. 2021
 
 Další major verze je tu! Kompletní (alespoň doufám) seznam změn je níže, ale pokud chceš vědět jen hlavní věci, tak tady máš souhrn:

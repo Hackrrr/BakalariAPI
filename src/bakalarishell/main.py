@@ -977,6 +977,7 @@ def main():
         "--command",
         help="Vykoná daný příkaz po zapnutí shellu (po autorunu); Lze opakovat vícekrát",
         action="append",
+        dest="commands",
         default=None,
     )
     # Všechny argumenty pro argparse MUSÍ mít "default=None", jinak se neprofiltrují
