@@ -3,10 +3,14 @@ Všechny důležité změny v tomto projektu budou zdokumentovány v tomto soubo
 
 Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) a podléhá [Sémantickému verzování](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] ([3.x])
+## [Unreleased] ([3.1.0])
 
 ### Added
+- Přidán protokol `bakalariapi.serialization.Upgradeable`, pomocí kterého mohou třídy při deserializaci převést data ze své staré struktury na novou
 - Přidána možnost vytvořit `bakalarishell.shell.Shell` instanci jako "dummy shell" - takováto instance nevytváří interaktivní elementy, není možné na ní volat `.start_loop()` (jinak nastane nový exception `bakalarishell.shell.DummyShellError`) a prakticky je ji možné využít pouze jako "dispatch" ovládaný přes metodu `.proc_string`. Pokud je při spouštění shellu přítomný argument "-c exit", shell se spustí v tomto "dummy" módu (vhodné pro testování).
+
+### Change
+- Modul `bakalariapi.serialization` nyní řeší escapování speciálních klíčů, které používá, takže se tato věc nemusí řešit externě; Bohužel tohle může mít za následek, že stará data mohou být špatně deserializována (pokud klíč slovníku začíná hashtagem).
 
 ### Fixed
 - Opravena chyba při spouštění `bakalarishell` s `-c`/`--command` argumentem

@@ -179,13 +179,21 @@ def serialize(
         return obj
     elif isinstance(obj, dict):
         # Pokud je dict, serializujeme rekurzivně všechny jeho hodnoty
+
+        output = {}
+        # Ale nejdříve escapujeme klíč "__type__" a klíče začínající "#",
+        # aby se o to nemusel starat nikdo jiný... a tiše doufáme, že všechny
+        # klíče jsou string
+        # TODO: Non-string klíče
+        for key in obj.keys():
+            output[
+                "#" + key if key == "__type__" or key.startswith("#") else key
+            ] = obj[key]
+
         if recursive:
-            output = {}
-            for key, value in obj.items():
+            for key, value in output.items():
                 output[key] = serialize(value, recursive)
-            return output
-        else:
-            output = copy.copy(obj)  # Pokaždé chceme, abychom vraceli novou hodnotu
+
         return output
     elif isinstance(obj, list):
         # Pokud je list, serializujeme rekurzivně všechny jeho hodnoty
@@ -280,10 +288,16 @@ def deserialize(
             # "elif" a "else" bloky. Takhle je to stanovený v PEP 647 a ani v Python mailing listu,
             # který řešil tenhle PEP, jsem nenašel důvod, proč tomu tak je eShrug
             data = cast(dict[str, SerializableValue], data)
+
+            # Odescapujeme klíče, které jsem escapovali při serializaci
+            output = {}
+            for key in data.keys():
+                output[key[1:] if key.startswith("#") else key] = data[key]
+
             if recusive:
-                for key, value in data.items():
-                    data[key] = deserialize(value, recusive)
-            return data
+                for key, value in output.items():
+                    output[key] = deserialize(value, recusive)
+            return output
     elif isinstance(data, list):
         if recusive:
             for index, value in enumerate(data):
@@ -388,9 +402,14 @@ def complex_deserialize(data: SerializedData) -> Any:
                 else:
                     return real_obj_list[reference_id]
             else:
-                for key, value in data.items():
-                    data[key] = recursion(value)
-                return data
+                # Odescapujeme klíče, které jsem escapovali při serializaci
+                output = {}
+                for key in data.keys():
+                    output[key[1:] if key.startswith("#") else key] = data[key]
+
+                for key, value in output.items():
+                    output[key] = recursion(value)
+                return output
         elif isinstance(data, list):
             for index, value in enumerate(data):
                 data[index] = recursion(value)
