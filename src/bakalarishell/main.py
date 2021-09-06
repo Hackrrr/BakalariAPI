@@ -27,6 +27,7 @@ from prompt_toolkit.shortcuts.progress_bar import ProgressBar, ProgressBarCounte
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.syntax import Syntax
+from rich.traceback import install as tb_install
 
 # Takový hack na to, aby `bakalarishell` šel spustit také přímo ze zdrojové složky
 # Pokud se `bakalarishell` spustí jako modul (= přes `import`), tak vše proběhne v pořádku
@@ -41,6 +42,7 @@ try:
 except ImportError:
     import shell  # type: ignore # Aby nebylo mypy nešťastné ohledně "redefinování" shellu
 
+tb_install(show_locals=True)
 cls = shell.cls
 
 api: bakalariapi.BakalariAPI

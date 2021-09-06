@@ -127,15 +127,6 @@ class SimpleSerializable(Serializable[dict[str, Any]]):
     def deserialize(cls: type[T0], data: dict[str, Any]) -> T0:
         # Postaveno na základě tohoto https://stackoverflow.com/a/2169191
         obj = super().__new__(cls)  # type: ignore # https://github.com/python/mypy/issues/9282
-
-        if issubclass(cls, Upgradeable):
-            actual = set(data.keys())
-
-            missing = cls._attributes - actual
-            redundant = actual - cls._attributes
-
-            data = cls.upgrade(data, missing, redundant)
-
         for k, v in data.items():
             # if hasattr(obj, k): # Nebude fungovat, jelikož nevoláme __init__, nýbrž pouze __new__ a tím pádem objekt nemá prakticky žádné atributy
             setattr(obj, k, v)
@@ -268,15 +259,22 @@ def deserialize(
             if data["__type__"] == "/":
                 # ... pokud ano, deserializujeme přes komplexní deserilizaci ...
                 return complex_deserialize(data)
-            # ... pokud ne, tak deserializujeme "vnořená" data ...
+            # ... pokud ne, tak deserializujeme "vnořená" data.
             if recusive:
                 data["data"] = deserialize(data["data"], recusive)
             type_ = resolve_string(data["__type__"])
+            # Ověříme, zda je typ Upgradeable, případně upgradujeme.
+            if isinstance(data["data"], dict) and issubclass(type_, Upgradeable):
+                actual = set(data.keys())
+                missing = type_._attributes - actual
+                redundant = actual - type_._attributes
+                data["data"] = type_.upgrade(data["data"], missing, redundant)
+            # Následně zkontrolujeme jestli typ implementuje Serializable protokol, ...
             if issubclass(type_, Serializable):
-                # ... poté zkontrolujeme jestli typ implementuje Serializable protokol, ...
+                # pokud ano, deserializujeme pomocí něj, ...
                 return type_.deserialize(data["data"])
+            # ... pokud ne, tak zkotrolujeme, jestli je registrovený deserializer pro tento typ ...
             if type_ in _serializers:
-                # ... jinak zkotrolujeme, jestli je registrovený deserializer pro tento typ ...
                 return _serializers[type_][1](data["data"])
             # ... a pokud ne, tak exception
             raise exceptions.MissingDeserializer(
