@@ -225,7 +225,22 @@ class Looting:
                 unresolved.append(v)
         self.add_result_set(bakalariAPI._resolve(unresolved))
 
+    def export_data(self) -> serialization.SerializedData:
+        return serialization.complex_serialize(
+            {
+                "data": self.data,
+                "unresolved": self.unresolved,
+            }
+        )
+
+    def import_data(self, data):
+        parsed = serialization.deserialize(data)
+        self.data = parsed["data"]
+        self.unresolved = parsed["unresolved"]
+
     def export_json(self, *args, **kwargs):
+        # Pro kompatibilitu s verzemi před BakalářiAPI 4.0, náhrada je `.export_data()`
+        # TODO: Bude odtraněno v jedné z následující verzích
         """Exportuje jako JSON data."""
         return json.dumps(
             serialization.complex_serialize(
@@ -239,6 +254,8 @@ class Looting:
         )
 
     def import_json(self, json_string: str, *args, **kwargs):
+        # Pro kompatibilitu s verzemi před BakalářiAPI 4.0, náhrada je `.import_data()`
+        # TODO: Bude odtraněno v jedné z následující verzích
         """Importuje JSON data.
 
         Upozornění: Importovaní dat ze zdrojů, kterým nedůvěřujete, může být nebezpečné.

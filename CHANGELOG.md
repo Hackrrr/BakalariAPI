@@ -8,6 +8,7 @@ Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 ### Added
 - Přidán protokol `bakalariapi.serialization.Upgradeable`, pomocí kterého mohou třídy při deserializaci převést data ze své staré struktury na novou
 - Přidána možnost vytvořit `bakalarishell.shell.Shell` instanci jako "dummy shell" - takováto instance nevytváří interaktivní elementy, není možné na ní volat `.start_loop()` (jinak nastane nový exception `bakalarishell.shell.DummyShellError`) a prakticky je ji možné využít pouze jako "dispatch" ovládaný přes metodu `.proc_string`. Pokud je při spouštění shellu přítomný argument "-c exit", shell se spustí v tomto "dummy" módu (vhodné pro testování).
+- Přidány metody `looting.Looting.export_data()` a `looting.Looting.import_data()`
 
 ### Change
 - Modul `bakalariapi.serialization` nyní řeší escapování speciálních klíčů, které používá, takže se tato věc nemusí řešit externě; Bohužel tohle může mít za následek, že stará data mohou být špatně deserializována (pokud klíč slovníku začíná hashtagem).
@@ -15,6 +16,9 @@ Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 ### Fixed
 - Opravena chyba při spouštění `bakalarishell` s `-c`/`--command` argumentem
 - Zamezen výskyt `MarkupResemblesLocatorWarning`u z `bs4`
+
+### Deprecated
+- Metody `looting.Looting.export_json()` a `looting.Looting.import_json()` jsou nyní zastaralé, lze je nahradit skrze metody `looting.Looting.export_data()` a `looting.Looting.import_data()`, které ovšem generují serializovatelná data namísto JSONu
 
 ## [3.0.0] - 31. 8. 2021
 

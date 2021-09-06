@@ -623,8 +623,8 @@ def Command_Konec(nice: bool = True):
 def Command_Export(file_name: str = "main"):
     print("Generace JSON dat...")
     with get_io_file(file_name, True) as f:
-        f.write(api.looting.export_json())
-        # Odstraníme data, která jsou případně po JSONu, co jsme teď napsali (třeba pozůstatek po předchozím JSONu, pokud byl delší, jak náš současný)
+        f.write(json.dumps(api.looting.export_data(), ensure_ascii=False))
+        # Odstraníme data, která jsou případně po JSONu, co jsme teď napsali (třeba pozůstatek po předchozím JSONu, pokud byl delší jak náš současný)
         f.truncate()
     print(f"JSON data vygenerována a zapsána do souboru '{file_name}'")
 
@@ -632,7 +632,7 @@ def Command_Export(file_name: str = "main"):
 def Command_Import(file_name: str = "main"):
     try:
         with get_io_file(file_name, False) as f:
-            api.looting.import_json(f.read())
+            api.looting.import_data(json.loads(f.read()))
     except FileNotFoundError:
         rich_print(
             f"Data nebyla načtena, jelikož soubor '{file_name}' neexistuje",
@@ -742,11 +742,10 @@ def Test0():
 
 def Test1():
     # "Kopírování"
-    print("Vytváření kopie skrz JSON export/import...")
+    print("Vytváření kopie dat skrze export/import...")
+    data = api.looting.export_data()
     new = bakalariapi.looting.Looting()
-    json = api.looting.export_json()
-    print(json)
-    new.import_json(json)
+    new.import_data(data)
     print("Kopie vytvořena")
 
     # Porovnávání
