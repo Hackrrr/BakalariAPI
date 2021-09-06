@@ -10,6 +10,7 @@ from ..bakalari import BakalariAPI, Endpoint, _register_parser
 from ..looting import GetterOutput, ResultSet
 from ..objects import Grade
 from ..sessions import RequestsSession
+from ..utils import parseHTML
 
 
 def getter(
@@ -25,7 +26,7 @@ def getter(
                 else f"?dfrom={from_date.strftime('%Y%m%d')}0000&subt=obdobi"
             )
         )
-    return GetterOutput(Endpoint.GRADES, BeautifulSoup(response.content, "html.parser"))
+    return GetterOutput(Endpoint.GRADES, parseHTML(response.content))
 
 
 @_register_parser(Endpoint.GRADES, BeautifulSoup)

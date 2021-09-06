@@ -19,13 +19,14 @@ from enum import Enum
 from typing import Any, Callable, Literal, overload
 
 import requests
-from bs4 import BeautifulSoup
+
+from .utils import parseHTML
 
 LOGGER = logging.getLogger("bakalariapi")
 LOGGER.addHandler(logging.NullHandler())
 
 __all__ = ["Endpoint", "BakalariAPI", "LAST_SUPPORTED_VERSION", "GetMode"]
-LAST_SUPPORTED_VERSION = "1.41.506.1"
+LAST_SUPPORTED_VERSION = "1.43.824.1"
 
 
 class Endpoint:
@@ -342,10 +343,7 @@ class BakalariAPI:
         ) as session:
             getter_output = looting.GetterOutput(
                 Endpoint.USER_INFO,
-                BeautifulSoup(
-                    session.get(self.get_endpoint(Endpoint.USER_INFO)).content,
-                    "html.parser",
-                ),
+                parseHTML(session.get(self.get_endpoint(Endpoint.USER_INFO)).content),
             )
         self._parse(getter_output)
 

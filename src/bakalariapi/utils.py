@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import logging
 import sys
+import warnings
 from datetime import datetime, timedelta
-from typing import _ProtocolMeta  # type: ignore
+from typing import _ProtocolMeta  # type: ignore # _ProtocolMeta prý neexistuje eShrug
 from typing import Any, TypeVar, cast, get_args
 
+from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
 from bs4.element import Tag  # Kvůli mypy - https://github.com/python/mypy/issues/10826
 from requests.cookies import RequestsCookieJar
 from selenium.webdriver.remote.webdriver import WebDriver
@@ -51,6 +53,13 @@ def line_iterator(text: str):
             break
         yield text[prevnl + 1 : nextnl]
         prevnl = nextnl
+
+
+def parseHTML(markup: str | bytes) -> BeautifulSoup:
+    with warnings.catch_warnings():
+        # viz docstring warningu
+        warnings.simplefilter("ignore", MarkupResemblesLocatorWarning)
+        return BeautifulSoup(markup, "html.parser")
 
 
 def bs_get_text(soup: Tag) -> str:

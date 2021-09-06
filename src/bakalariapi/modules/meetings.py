@@ -17,7 +17,7 @@ from ..objects import (
     UnresolvedID,
 )
 from ..sessions import RequestsSession
-from ..utils import line_iterator
+from ..utils import line_iterator, parseHTML
 
 
 def getter_meeting(bakalariAPI: BakalariAPI, ID: str) -> GetterOutput[dict]:
@@ -33,9 +33,7 @@ def getter_future_meetings_ids(bakalariAPI: BakalariAPI) -> GetterOutput[Beautif
     """Získá IDčka budoucích schůzek."""
     with bakalariAPI.session_manager.get_session_or_create(RequestsSession) as session:
         response = session.get(bakalariAPI.get_endpoint(Endpoint.MEETINGS_OVERVIEW))
-    return GetterOutput(
-        Endpoint.MEETINGS_OVERVIEW, BeautifulSoup(response.content, "html.parser")
-    )
+    return GetterOutput(Endpoint.MEETINGS_OVERVIEW, parseHTML(response.content))
 
 
 def getter_meetings_ids(

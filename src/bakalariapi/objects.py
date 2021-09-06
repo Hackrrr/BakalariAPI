@@ -6,12 +6,17 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
 from typing import Any, Generic, TypeVar
 
-from bs4 import BeautifulSoup
-
 from .bakalari import BakalariAPI, Endpoint
 from .serialization import Serializable, SimpleSerializable, Upgradeable
 from .sessions import RequestsSession
-from .utils import T0, bs_get_text, cs_timedelta, get_full_type_name, resolve_string
+from .utils import (
+    T0,
+    bs_get_text,
+    cs_timedelta,
+    get_full_type_name,
+    parseHTML,
+    resolve_string,
+)
 
 __all__ = [
     "ServerInfo",
@@ -245,7 +250,7 @@ class Komens(BakalariObject):
             f"{'[yellow]' if rich_colors and self.need_confirm and not self.confirmed else ''}Vyžaduje potvrzení? {'Ano' if self.need_confirm else 'Ne'}; Potvrzena? {'Ano' if self.confirmed else 'Ne'}{'[/yellow]' if rich_colors and self.need_confirm and not self.confirmed else ''}\n"
             f"Má soubory? {'Ano' if len(self.files) > 0 else 'Ne'}\n"
             "\n"
-            f"{bs_get_text(BeautifulSoup(self.content, 'html.parser'))}"  # .get_text().strip()
+            f"{bs_get_text(parseHTML(self.content))}"  # .get_text().strip()
         )
 
 
@@ -412,7 +417,7 @@ class Meeting(Upgradeable, BakalariObject):
             f"Název: {self.name.strip()}\n"
             f"Počet osob, které viděli pozvánku: {len(list(self.read_by()))}/{len(self.participants)}\n"
             "\n"
-            f"{bs_get_text(BeautifulSoup(self.content, 'html.parser'))}"
+            f"{bs_get_text(parseHTML(self.content))}"
         )
 
     @classmethod
@@ -516,5 +521,5 @@ class Homework(BakalariObject):
             f"Hotovo? {'Ano' if self.done else ('[yellow]Ne[/yellow]' if rich_colors else 'Ne') }\n"
             f"Soubory?\n{soubory_text}"
             "\n"
-            f"{bs_get_text(BeautifulSoup(self.content, 'html.parser'))}"
+            f"{bs_get_text(parseHTML(self.content))}"
         )

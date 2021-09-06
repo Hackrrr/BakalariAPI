@@ -19,7 +19,7 @@ from typing import IO, Any, Callable, cast
 import bakalariapi
 import platformdirs
 import rich
-from bs4 import BeautifulSoup
+from bakalariapi.utils import parseHTML
 from prompt_toolkit.input import create_input
 from prompt_toolkit.key_binding import KeyPress
 from prompt_toolkit.keys import Keys
@@ -201,11 +201,7 @@ def show(obj: bakalariapi.objects.BakalariObject, title: str | None = None):
                 webbrowser.open(o.join_url)
             elif key == "z":
                 c = Console()
-                c.print(
-                    Syntax(
-                        str(BeautifulSoup(o.content, "html.parser").prettify()), "html"
-                    )
-                )
+                c.print(Syntax(str(parseHTML(o.content).prettify()), "html"))
 
         asyncio.run(keyhandler(meeting_key_handler))
     # elif isinstance(obj, bakalariapi.Student):
@@ -234,11 +230,7 @@ def show(obj: bakalariapi.objects.BakalariObject, title: str | None = None):
                 print("Úkol označen jako nehotový")
             elif key == "z":
                 c = Console()
-                c.print(
-                    Syntax(
-                        str(BeautifulSoup(o.content, "html.parser").prettify()), "html"
-                    )
-                )
+                c.print(Syntax(str(parseHTML(o.content).prettify()), "html"))
 
         asyncio.run(keyhandler(homework_key_handler))
 

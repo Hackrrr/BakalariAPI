@@ -14,6 +14,7 @@ Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Fixed
 - Opravena chyba při spouštění `bakalarishell` s `-c`/`--command` argumentem
+- Zamezen výskyt `MarkupResemblesLocatorWarning`u z `bs4`
 
 ## [3.0.0] - 31. 8. 2021
 

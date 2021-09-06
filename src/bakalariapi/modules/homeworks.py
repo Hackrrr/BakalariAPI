@@ -15,6 +15,7 @@ from ..exceptions import MissingElementError
 from ..looting import GetterOutput, ResultSet
 from ..objects import Homework, HomeworkFile
 from ..sessions import RequestsSession, SeleniumSession
+from ..utils import parseHTML
 
 LOGGER = logging.getLogger("bakalariapi.modules.homeworks")
 
@@ -23,9 +24,7 @@ def getter_fast(bakalariAPI: BakalariAPI) -> GetterOutput[BeautifulSoup]:
     """Získá pouze prvních 20 nehotových aktivních úkolů, ale je mnohem rychlejší než ostatní metody na získání úkolů."""
     with bakalariAPI.session_manager.get_session_or_create(RequestsSession) as session:
         response = session.get(bakalariAPI.get_endpoint(Endpoint.HOMEWORKS))
-    return GetterOutput(
-        Endpoint.HOMEWORKS, BeautifulSoup(response.content, "html.parser")
-    )
+    return GetterOutput(Endpoint.HOMEWORKS, parseHTML(response.content))
 
 
 def get_slow(
@@ -56,7 +55,7 @@ def get_slow(
         while True:
             source = session.session.page_source
             temp_result = bakalariAPI._parse(
-                GetterOutput(Endpoint.HOMEWORKS, BeautifulSoup(source, "html.parser"))
+                GetterOutput(Endpoint.HOMEWORKS, parseHTML(source))
             )
 
             if temp_result.get(Homework)[0].ID == checkID:  # Náš "fail check"

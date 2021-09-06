@@ -10,6 +10,7 @@ from ..exceptions import MissingElementError
 from ..looting import GetterOutput, ResultSet
 from ..objects import Komens, KomensFile, UnresolvedID
 from ..sessions import RequestsSession
+from ..utils import parseHTML
 
 
 def getter_komens_ids(
@@ -30,7 +31,7 @@ def getter_komens_ids(
 
     with bakalariAPI.session_manager.get_session_or_create(RequestsSession) as session:
         response = session.get(target)
-    return GetterOutput(Endpoint.KOMENS, BeautifulSoup(response.content, "html.parser"))
+    return GetterOutput(Endpoint.KOMENS, parseHTML(response.content))
 
 
 def getter_info(
