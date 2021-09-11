@@ -146,14 +146,23 @@ class Looting:
     def __add_one(self, o: objects.BakalariObject):
         """Přidá do lootu daný objekt."""
         if isinstance(o, objects.UnresolvedID):
-            self.unresolved.setdefault(o.type.__name__, {})[o.ID] = o
+            if not self.have_id(o.type, o.ID):
+                self.unresolved.setdefault(o.type.__name__, {})[o.ID] = o
         else:
             if (
                 type(o).__name__ in self.unresolved
                 and o.ID in self.unresolved[type(o).__name__]
             ):
                 del self.unresolved[type(o).__name__][o.ID]
-            self.data.setdefault(type(o).__name__, {})[o.ID] = o
+            if type(o).__name__ in self.data:
+                if o.ID in self.data[type(o).__name__]:
+                    # TODO: Merge
+                    # self.data[type(o).__name__][o.ID].merge(o)
+                    ...
+                else:
+                    self.data[type(o).__name__][o.ID] = o
+            else:
+                self.data[type(o).__name__] = {o.ID: o}
 
     def add_loot(self, loot: objects.BakalariObject | list[objects.BakalariObject]):
         """Přidá loot.
@@ -212,6 +221,14 @@ class Looting:
         except KeyError:
             return []
 
+    def have_id(self, type_: type[BakalariObj], ID: str):
+        if type_ == objects.UnresolvedID:
+            raise ValueError("Nelze zkontrolovat přítomnost ID pro UnresolvedID")
+        if type_.__name__ in self.data:
+            return ID in self.data[type_.__name__]
+        else:
+            return False
+
     def resolve_unresolved(self, bakalariAPI: BakalariAPI):
         """Pokusí "vyřešit" všechny `UnresolvedID`.
 
@@ -235,8 +252,16 @@ class Looting:
 
     def import_data(self, data):
         parsed = serialization.deserialize(data)
-        self.data = parsed["data"]
-        self.unresolved = parsed["unresolved"]
+        self.__lock.acquire()
+        try:
+            for type_ in parsed["data"]:
+                for obj in parsed["data"][type_].values():
+                    self.__add_one(obj)
+            for type_ in parsed["unresolved"]:
+                for obj in parsed["unresolved"][type_].values():
+                    self.__add_one(obj)
+        finally:
+            self.__lock.release()
 
     def export_json(self, *args, **kwargs):
         # Pro kompatibilitu s verzemi před BakalářiAPI 4.0, náhrada je `.export_data()`

@@ -364,35 +364,47 @@ def Init():
         f"Kontrola stavu serveru/webu [cyan]{api.server_info.url}[/cyan]...",
         highlight=False,
     )
-    if not api.is_server_running():
-        try:
-            if dialog_ano_ne(
-                "Server/web (pravděpodobně) neběží; Chce se pokusit naimportovat data z předchozího souboru?",
-                True,
-                "yellow",
-            ):
-                Command_Import()
-            else:
+    try:
+        if not api.is_server_running():
+            try:
+                if dialog_ano_ne(
+                    "Server/web (pravděpodobně) neběží; Chce se pokusit naimportovat data z předchozího souboru?",
+                    True,
+                    "yellow",
+                ):
+                    Command_Import()
+                else:
+                    partial_init_mode()
+                    return
+            except KeyboardInterrupt:
                 partial_init_mode()
                 return
-        except KeyboardInterrupt:
+        rich_print("Sever/web běží", color="green")
+        rich_print(
+            f"Kontrola přihlašovacích údajů pro uživatele [cyan]{api.username}[/cyan]...",
+            highlight=False,
+        )
+        if not api.is_login_valid():
+            rich_print("Přihlašovací údaje jsou neplatné", color="red")
             partial_init_mode()
             return
-    rich_print("Sever/web běží", color="green")
-    rich_print(
-        f"Kontrola přihlašovacích údajů pro uživatele [cyan]{api.username}[/cyan]...",
-        highlight=False,
-    )
-    if not api.is_login_valid():
-        rich_print("Přihlašovací údaje jsou neplatné", color="red")
+    except KeyboardInterrupt:
+        rich_print("Inicializace byla předčasně ukončena", color="yellow")
         partial_init_mode()
         return
     rich_print("Přihlašovací údaje ověřeny a jsou správné", color="green")
     print("Nastavuji...")
-    with warnings.catch_warnings():
-        # Nechceme dostat `VersionMismatchWarning`, protože v `SeverInfo()` kontrolujeme verzi manuálně
-        warnings.simplefilter("ignore")
-        api.init()
+    try:
+        with warnings.catch_warnings():
+            # Nechceme dostat `VersionMismatchWarning`, protože v `SeverInfo()` kontrolujeme verzi manuálně
+            warnings.simplefilter("ignore")
+            api.init()
+    except KeyboardInterrupt:
+        rich_print(
+            "Nebyly získány informace o stavu serveru, ale žádné funkce by tímto neměli být ovlivněny",
+            color="yellow",
+        )
+        return
     print("Nastaveno:")
     ServerInfo()
 
@@ -401,12 +413,12 @@ def ServerInfo():
     rich_print(
         f"Typ uživatele: [cyan]{'Není k dispozici' if api.user_info.type == '' else api.user_info.type}[/cyan]\n"
         f"Uživatelký hash: [cyan]{'Není k dispozici' if api.user_info.hash == '' else api.user_info.hash}[/cyan]\n"
-        f"Verze Bakalářů: [cyan]{'Není k dispozici' if api.server_info.version == '' else api.server_info.version}[/cyan]\n"
+        f"Verze Bakalářů: [cyan]{'Není k dispozici' if api.server_info.version is None else api.server_info.version}[/cyan]\n"
         f"Datum verze Bakalářů: [cyan]{'Není k dispozici' if api.server_info.version_date is None else api.server_info.version_date.strftime('%d. %m. %Y')}[/cyan]\n"
         f"Evidenční číslo verze Bakalářů: [cyan]{'Není k dispozici' if api.server_info.evid_number is None else api.server_info.evid_number}[/cyan]",
         highlight=False,
     )
-    if not api.is_version_supported():
+    if not (api.server_info.version is None) and not api.is_version_supported():
         rich_print(
             "*** Jiná verze Bakalářů! Všechny funkce nemusejí fungovat správně! ***",
             highlight=False,

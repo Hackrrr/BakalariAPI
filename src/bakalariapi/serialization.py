@@ -227,19 +227,22 @@ def deserialize(data: TSerializablePrimitive) -> TSerializablePrimitive:
 
 # Vracíme `Any`, jelikož k tomu jsou type checkery shovívavější jak k `object`
 @overload
-def deserialize(data: SerializedData | RawSerializedData, recusive: bool = True) -> Any:
+def deserialize(
+    data: SerializedData | RawSerializedData, recursive: bool = True
+) -> Any:
     ...
 
 
 @overload
-def deserialize(data: SerializableValue, recusive: bool = True) -> RawSerializableValue:
+def deserialize(
+    data: SerializableValue, recursive: bool = True
+) -> RawSerializableValue:
     ...
 
 
 def deserialize(
-    data: SerializableValue | SerializedData | RawSerializedData, recusive: bool = True
+    data: SerializableValue | SerializedData | RawSerializedData, recursive: bool = True
 ) -> Any:
-
     if is_union(data, SerializablePrimitive):
         # Pokud je primitive, necháme tak jak je
         return data
@@ -260,8 +263,8 @@ def deserialize(
                 # ... pokud ano, deserializujeme přes komplexní deserilizaci ...
                 return complex_deserialize(data)
             # ... pokud ne, tak deserializujeme "vnořená" data.
-            if recusive:
-                data["data"] = deserialize(data["data"], recusive)
+            if recursive:
+                data["data"] = deserialize(data["data"], recursive)
             type_ = resolve_string(data["__type__"])
             # Ověříme, zda je typ Upgradeable, případně upgradujeme.
             if isinstance(data["data"], dict) and issubclass(type_, Upgradeable):
@@ -292,16 +295,15 @@ def deserialize(
             for key in data.keys():
                 output[key[1:] if key.startswith("#") else key] = data[key]
 
-            if recusive:
+            if recursive:
                 for key, value in output.items():
-                    output[key] = deserialize(value, recusive)
+                    output[key] = deserialize(value, recursive)
             return output
     elif isinstance(data, list):
-        if recusive:
-            for index, value in enumerate(data):
-                data[index] = deserialize(value, recusive)
-            # data = list(map(lambda x: deserialize(x, True), obj))
-        return data
+        output = []
+        for index, value in enumerate(data):
+            output[index] = deserialize(value, recursive) if recursive else value
+        return output
     raise ValueError
 
 
@@ -453,7 +455,7 @@ def complex_deserialize(data: SerializedData) -> Any:
             #   a kde `late_deserialization` vrací upravený deserializovaný objekt                  .
             # Takhle je načrtnuto budoucí API, ale jelikož nemám žádný objekt,
             # u kterého bych potřeboval deserializovat rekurzi, tak nevím,
-            # jestli je takového API vhodné a v tuto chvíli je tedy pro mě tato
+            # jestli je takového API vhodné a v tuto chvíli je tedy pro mě toto
             # featura s nízkou prioritou. (Navíc mám tušení, že se něco extrémně
             # pokazí (jako vždy) a nebude to tak pěkné, jak jsem tady načrtl.)
             raise RecursionError("Detekována rekurze při deserializaci")
@@ -475,3 +477,8 @@ register(datetime, lambda x: x.isoformat(), datetime.fromisoformat)
 register(tuple, list, tuple)
 # set
 register(set, list, set)
+# type
+# register(type, get_full_type_name, resolve_string)
+# Proč ne? Protože tohle zavání možností "exploitu", jelikož `resolve_string`
+# klidně vrátí `os.system` a pokud s kód přepokládá callable objekt, tak to
+# může dopadnout hodně špatně
