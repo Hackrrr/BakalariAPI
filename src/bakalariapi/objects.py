@@ -84,7 +84,7 @@ class UserInfo:
         self.ID: str = userID
 
 
-class BakalariObject(SimpleSerializable, ABC):
+class BakalariObject(SimpleSerializable, ABC, Upgradeable):
     """Základní třída pro objekty parsované z Bakalářů (kromě tříd ServerInfo a UserInfo).
 
     Atributy:
@@ -367,9 +367,8 @@ class Meeting(BakalariObject, Upgradeable):
 
     Datetime instance v této tříde jsou offset-aware."""
 
-    _attributes = {
-        "ID",
-        "_date" "ownerID",
+    _attributes = BakalariObject._attributes | {
+        "ownerID",
         "name",
         "content",
         "start_time",

@@ -6,8 +6,40 @@ import logging
 import sys
 import warnings
 from datetime import datetime, timedelta
-from typing import _ProtocolMeta  # type: ignore # _ProtocolMeta prý neexistuje eShrug
-from typing import Any, TypeVar, cast, get_args
+from typing import TYPE_CHECKING, Any, TypeVar, cast, get_args
+
+# Pojďme si zodpovědět ozázku, proč je tu tohle?
+# Núže... Bylo nebylo, pyright zase zklamal. Teda ne že bych se divil,
+# vzhledem k tomu, že je to kvůli `_CustomChecks` (meta)třídě, která
+# rozhodně porušuje celý zen Pythonu. Problém má základ v importu
+# `_ProtocolMeta` z `typing` modulu - jak pyright, tak i mypy, si při
+# něm stěžujou na to, že `_ProtocolMeta` neexistuje. Ok, přeci jen to
+# absolutně nikdo nemá používat, takže tohle beru. Bohužel to má ale
+# za následek, že se typ `_ProtocolMeta` jeví jako `Unknown` pro
+# pyright a jako `Any` pro mypy. A to je očividně problém, pokud toho
+# začneme derivovat a použijeme derivovaný typ jako metatřídu (tak jak
+# to s `_CustomChecks` děláme).
+# Nikdo si na nic nestěžuje, ale je tu takový "malý" zádrhel, který
+# se ukáže, když se pokusíme něco typovat pomocí třídy, která má
+# takovoutu "divnou" metatřídu. Mypy si s tím poradí v pohodě, pyright
+# bohužel už ne. Přepodkládejme toto:
+#   class MyMeta(Any): ...
+#   class A(metaclass=MyMeta): ...
+#   def test(value: A | list[A]): reveal_type(value)
+# Mypy správně vyhodí, že typ pro `value` je `A | list[A]`, ale
+# pyright vyhodí, že `value` je typu `Unknown`. A abychom tento
+# problém vyřešili, tak třída `_ProtocolMeta` musí být někde "správně"
+# definovaná a to je ten důvod, proč je tady tento `if`.
+# Pozn.: Docela zvláštní je to, že pyright správně ukáže typ, pokud
+# daný typ nemá v sobě 2x `A` (v tomto případě). Tzn., že třeba `A`
+# nebo `list[A] | None` projde v pořádku.
+if TYPE_CHECKING:
+    # fmt: off
+    from abc import ABCMeta
+    class _ProtocolMeta(ABCMeta): ... 
+    # fmt: on
+else:
+    from typing import _ProtocolMeta
 
 from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
 from bs4.element import Tag  # Kvůli mypy - https://github.com/python/mypy/issues/10826
@@ -327,13 +359,13 @@ class _CustomChecks(_ProtocolMeta):
     """
 
     def __instancecheck__(self, instance: Any) -> bool:
-        if type(type(instance)) is _CustomChecks and hasattr(
-            type(instance), "__instancecheck__"
+        if issubclass(type(type(self)), _CustomChecks) and hasattr(
+            type(self), "__instancecheck__"
         ):
-            return type(instance).__instancecheck__(instance)  # type: ignore # "__instancecheck__" neexsituje :)
+            return type(self).__instancecheck__(instance)  # type: ignore # "__instancecheck__" neexsituje :)
         return type.__instancecheck__(self, instance)
 
     def __subclasscheck__(self, subclass: type) -> bool:
-        if type(subclass) is _CustomChecks and hasattr(subclass, "__subclasscheck__"):
-            return subclass.__subclasscheck__(subclass)  # type: ignore # "__subclasscheck__" neexsituje :)
+        if issubclass(type(self), _CustomChecks) and hasattr(self, "__subclasscheck__"):
+            return self.__subclasscheck__(subclass)  # type: ignore # "__subclasscheck__" neexsituje :)
         return type.__subclasscheck__(self, subclass)
