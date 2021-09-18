@@ -91,14 +91,16 @@ class BakalariObject(SimpleSerializable, ABC):
         ID:
             ID objektu.
             Slouží k jednoznačné identifikaci objektu v rámci Bakalářů.
-        date:
+        _date:
             Čas, kdy byl objekt vytvořen.
             Uchováván, aby bylo možné porovnávat stáří dat.
     """
 
+    _attributes = {"ID", "_date"}
+
     def __init__(self, ID: str):
         self.ID = ID
-        self.date = datetime.now()
+        self._date = datetime.now()
 
     @abstractmethod
     def format(self, rich_colors: bool = False) -> str:
@@ -114,13 +116,26 @@ class BakalariObject(SimpleSerializable, ABC):
     def _sort_by_date(
         objects: list["BakalariObj"], newest_first: bool = True
     ) -> list["BakalariObj"]:
-        return sorted(objects, key=lambda x: x.date, reverse=newest_first)
+        return sorted(objects, key=lambda x: x._date, reverse=newest_first)
 
     @classmethod
     def merge(cls: type["BakalariObj"], objects: list["BakalariObj"]) -> "BakalariObj":
         # IDK proč nemá typevar implicitní upper bound na svojí třídu, když je to generický `self` nebo `cls` eShrug
         # Asi bych pochopil, že to nefunguje napříč dědičností, ale alespoň v rámci metody by to takhle fungovat mohlo
         return cls._sort_by_date(objects)[0]
+
+    @classmethod
+    def upgrade(
+        cls,
+        data: dict[str, Any],
+        missing_attributes: set[str],
+        redundant_attributes: set[str],
+    ) -> dict[str, Any]:
+        # Data z verze před 3.1
+        if "_date" in missing_attributes:
+            data["_date"] = datetime.min
+            missing_attributes.remove("_date")
+        return data
 
 
 BakalariObj = TypeVar("BakalariObj", bound=BakalariObject)
@@ -354,7 +369,7 @@ class Meeting(BakalariObject, Upgradeable):
 
     _attributes = {
         "ID",
-        "ownerID",
+        "_date" "ownerID",
         "name",
         "content",
         "start_time",
@@ -443,6 +458,7 @@ class Meeting(BakalariObject, Upgradeable):
         missing_attributes: set[str],
         redundant_attributes: set[str],
     ) -> dict[str, Any]:
+        data = super().upgrade(data, missing_attributes, redundant_attributes)
         # Data z verze před 3.0
         if (
             "owner" in missing_attributes
