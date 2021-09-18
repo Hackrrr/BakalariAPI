@@ -111,7 +111,7 @@ def parser_meetings_info(getter_output: GetterOutput[dict]) -> ResultSet:
     participants: dict[str, MeetingParticipant] = {}
     for p in obj["data"]["Participants"]:
         participants[p["PersonId"]] = MeetingParticipant(
-            p["PersonID"], p["PersonName"], None
+            p["PersonId"], p["PersonName"], None
         )
     for p in obj["data"]["ParticipantsListOfRead"]:
         participants[p["PersonId"]].read_time = datetime.strptime(

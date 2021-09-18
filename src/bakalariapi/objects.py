@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, abstractstaticmethod
 from datetime import datetime, timedelta, timezone
 from typing import Any, Generic, TypeVar
 
@@ -91,10 +91,14 @@ class BakalariObject(SimpleSerializable, ABC):
         ID:
             ID objektu.
             Slouží k jednoznačné identifikaci objektu v rámci Bakalářů.
+        date:
+            Čas, kdy byl objekt vytvořen.
+            Uchováván, aby bylo možné porovnávat stáří dat.
     """
 
     def __init__(self, ID: str):
         self.ID = ID
+        self.date = datetime.now()
 
     @abstractmethod
     def format(self, rich_colors: bool = False) -> str:
@@ -105,6 +109,18 @@ class BakalariObject(SimpleSerializable, ABC):
                 Indikuje, zda ve výsledném textu mají být zahnuty "tagy" barev (pro `rich` modul).
                 Pokud `True`, "tagy" budou přítomny, jinak ne.
         """
+
+    @staticmethod
+    def _sort_by_date(
+        objects: list["BakalariObj"], newest_first: bool = True
+    ) -> list["BakalariObj"]:
+        return sorted(objects, key=lambda x: x.date, reverse=newest_first)
+
+    @classmethod
+    def merge(cls: type["BakalariObj"], objects: list["BakalariObj"]) -> "BakalariObj":
+        # IDK proč nemá typevar implicitní upper bound na svojí třídu, když je to generický `self` nebo `cls` eShrug
+        # Asi bych pochopil, že to nefunguje napříč dědičností, ale alespoň v rámci metody by to takhle fungovat mohlo
+        return cls._sort_by_date(objects)[0]
 
 
 BakalariObj = TypeVar("BakalariObj", bound=BakalariObject)
@@ -331,7 +347,7 @@ class MeetingParticipant(SimpleSerializable):
         self.read_time: datetime | None = read_time
 
 
-class Meeting(Upgradeable, BakalariObject):
+class Meeting(BakalariObject, Upgradeable):
     """Třída/objekt držící informace o známkách/klasifikaci.
 
     Datetime instance v této tříde jsou offset-aware."""

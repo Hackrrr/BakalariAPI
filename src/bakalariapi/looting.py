@@ -156,9 +156,9 @@ class Looting:
                 del self.unresolved[type(o).__name__][o.ID]
             if type(o).__name__ in self.data:
                 if o.ID in self.data[type(o).__name__]:
-                    # TODO: Merge
-                    # self.data[type(o).__name__][o.ID].merge(o)
-                    ...
+                    self.data[type(o).__name__][o.ID] = type(o).merge(
+                        [self.data[type(o).__name__][o.ID], o]
+                    )
                 else:
                     self.data[type(o).__name__][o.ID] = o
             else:
