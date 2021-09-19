@@ -10,7 +10,11 @@ Je to jednoduché - tváříme jako "normální" uživatel, který využívá we
 Ačkoli původně šlo jen o vytvoření základního API, projekt postupně expandoval a nyní bych to označil za několik věcí v sobě, jehož hlavní části jsou `bakalariapi` (samotné API pro Bakaláře) a `bakalarishell` (konzolová aplikace pro základní práci s Bakaláři). V budoucnu se tyto věci pravděpodobně rozdělí, ale zatím jsou spolu.
 
 # Instalace
-Základní instalace se provádí přes `pip`:
+Instalaci lze provést přes `pip`:
+```
+pip install bakalariapi
+```
+Tím se nainstaluje poslední verze `BakalářiAPI`. Pokud chceš vyzkoušet všecny novinky, co se ještě nedostali do žádné verze, můžeš `BakalářiAPI` nainstalovat přímo ze zdroje (doufám, že není nutno dodávat, že `BakalářiAPI` může být a pravděpodobně bude značně nestabilní):
 ```
 pip install git+https://github.com/Hackrrr/BakalariAPI
 ```

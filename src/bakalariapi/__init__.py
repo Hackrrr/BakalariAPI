@@ -29,7 +29,7 @@ __all__ = [
     "Student",
     "Homework",
 ]
-__version__ = "3.1.0-dev"
+__version__ = "3.1.0"
 
 from . import (
     bakalari,

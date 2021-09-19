@@ -1,7 +1,0 @@
-bs4
-platformdirs
-prompt-toolkit>=3.0.9 # ProgressBarCounter
-requests
-rich
-selenium
-typing-extensions>=3.10.0.0 # TypeGuard

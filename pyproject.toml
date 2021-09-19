@@ -1,3 +1,23 @@
+[project]
+name = "BakalariAPI"
+version = "3.1.0"
+description = "API pro Bakaláře"
+readme = "README.md"
+python-requires = ">=3.9"
+license = {file = "LICENSE"}
+authors = [{name = "Hackrrr"}]
+urls = {project = "https://github.com/Hackrrr/BakalariAPI/"}
+dependencies = [
+    "bs4",
+    "platformdirs",
+    "prompt-toolkit>=3.0.9", # ProgressBarCounter
+    "requests",
+    "rich",
+    "selenium",
+    "typing-extensions>=3.10" # TypeGuard
+]
+scripts = {bakalarishell = "bakalarishell:main"}
+
 [build-system]
 requires = [
     "setuptools >= 40.9.0",

@@ -3,9 +3,10 @@ Všechny důležité změny v tomto projektu budou zdokumentovány v tomto soubo
 
 Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) a podléhá [Sémantickému verzování](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] ([3.1.0])
+## [3.1.0] - 19. 9. 2021
 
 ### Added
+- Přidána možnost instalace z PyPI (`pip install bakalariapi`)
 - Přidán protokol `bakalariapi.serialization.Upgradeable`, pomocí kterého mohou třídy při deserializaci převést data ze své staré struktury na novou
 - Přidána možnost vytvořit `bakalarishell.shell.Shell` instanci jako "dummy shell" - takováto instance nevytváří interaktivní elementy, není možné na ní volat `.start_loop()` (jinak nastane nový exception `bakalarishell.shell.DummyShellError`) a prakticky je ji možné využít pouze jako "dispatch" ovládaný přes metodu `.proc_string`. Pokud je při spouštění shellu přítomný argument "-c exit", shell se spustí v tomto "dummy" módu (vhodné pro testování).
 - Přidány metody `looting.Looting.export_data()` a `looting.Looting.import_data()`
