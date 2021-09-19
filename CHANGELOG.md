@@ -10,6 +10,7 @@ Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 - Přidána možnost vytvořit `bakalarishell.shell.Shell` instanci jako "dummy shell" - takováto instance nevytváří interaktivní elementy, není možné na ní volat `.start_loop()` (jinak nastane nový exception `bakalarishell.shell.DummyShellError`) a prakticky je ji možné využít pouze jako "dispatch" ovládaný přes metodu `.proc_string`. Pokud je při spouštění shellu přítomný argument "-c exit", shell se spustí v tomto "dummy" módu (vhodné pro testování).
 - Přidány metody `looting.Looting.export_data()` a `looting.Looting.import_data()`
 - Přidána metoda `looting.Looting.have_id()`, která zkontroluje, zda je již objekt (daného typu a s daným ID) uložen
+- Přidána metoda `objects.BakalariObject.merge()` (zatím není pořádně využitá)
 
 ### Changed
 - Modul `bakalariapi.serialization` nyní řeší escapování speciálních klíčů, které používá, takže se tato věc nemusí řešit externě; Bohužel tohle může mít za následek, že stará data mohou být špatně deserializována (pokud klíč slovníku začíná hashtagem).

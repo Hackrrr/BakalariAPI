@@ -62,7 +62,7 @@ def restart():
         pádem se toto stát nemůže.
     """
     if sys.executable is None:
-        print("Unable to restart due to unknown iterpreter")
+        print("Unable to restart due to unknown interpreter")
         return
     cls()  # Aby se člověk neztratil v záplavě textu
     os.execvp(sys.executable, ["python"] + sys.argv)
@@ -414,7 +414,7 @@ class Shell:
                     return
                 inpt = self._prompt()
                 if self._should_exit:
-                    # If something requested exit but we are alredy asked user for input, exit here to prevent executing next command
+                    # If something requested exit but we are already asked user for input, exit here to prevent executing next command
                     return
                 if inpt != "":
                     try:

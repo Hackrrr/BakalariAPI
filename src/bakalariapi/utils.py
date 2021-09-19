@@ -230,14 +230,14 @@ def line_modifier(text: str, prefix: str = "", suffix: str = "") -> str:
 
 def resolve_string(string: str) -> Any:
     """Převede 'název' na objekt."""
-    splitted = string.split(".")
-    if splitted[0] not in sys.modules:
+    split = string.split(".")
+    if split[0] not in sys.modules:
         try:
-            __import__(splitted[0])
+            __import__(split[0])
         except ModuleNotFoundError:
             return None
-    pointer = sys.modules[splitted[0]]
-    for part in splitted[1:]:
+    pointer = sys.modules[split[0]]
+    for part in split[1:]:
         # hasattr() check, ale lepší, takže neděláme 2x getattr() (hasattr() dělá getattr() interně)
         try:
             pointer = getattr(pointer, part)

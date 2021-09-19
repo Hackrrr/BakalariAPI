@@ -60,14 +60,14 @@ def parser_meetings_overview_html(
     output = ResultSet()
     if getter_output.data.head is None:
         raise MissingElementError("head")
-    scritps = cast(list[Tag], getter_output.data.head("script"))
-    formated = ""
-    for script in scritps:
-        formated = script.prettify()
-        if "var model = " in formated:
+    scripts = cast(list[Tag], getter_output.data.head("script"))
+    formatted = ""
+    for script in scripts:
+        formatted = script.prettify()
+        if "var model = " in formatted:
             break
     loot = {"Meetings": False, "Students": False}
-    for line in line_iterator(formated):
+    for line in line_iterator(formatted):
         line = line.strip()
         if line.startswith("var meetingsData = "):
             loot["Meetings"] = True

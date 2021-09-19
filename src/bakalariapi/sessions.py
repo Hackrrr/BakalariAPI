@@ -287,7 +287,7 @@ class SessionManager:
             Slovník, který obsahuje všechny sessiony pod správou tohoto SessionMannageru.
             Klič je typ sessionu jako string (tedy název classy sessionu) a hodnota je list sessionů tohoto typu.
         start_auto_extend:
-            Pokud `True`, automaticky u sessionů zapne `auto_extend()` v nové deamon threadu.
+            Pokud `True`, automaticky u sessionů zapne `auto_extend()` v nové daemon threadu.
             Pokud `False`, tak nic.
             Default je `False`, jelikož ve většině případů session přežije po potřebnou dobu i bez `extend()`
             a zbytečně se nevytvářejí theady.

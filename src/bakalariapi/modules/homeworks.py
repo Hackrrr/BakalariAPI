@@ -47,8 +47,8 @@ def get_slow(
                 "//span[span/input[@id='cphmain_cbUnfinishedHomeworks_S']]"
             ).click()
             # Proč jsem musel šáhnout po XPath? Protože Bakaláři :) Input, podle kterého to můžeme najít, tak je schovaný...
-            # A jeho parrent taky... A protože je to schovaný, tak s tím nemůžeme iteragovat... Takže potřebujeme parrenta
-            # parrenta toho inputu, který už vidět je a můžeme na něj kliknout. Prostě super :)
+            # A jeho parent taky... A protože je to schovaný, tak s tím nemůžeme iteragovat... Takže potřebujeme parenta
+            # parenta toho inputu, který už vidět je a můžeme na něj kliknout. Prostě super :)
 
         checkID = ""
 

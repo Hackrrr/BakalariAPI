@@ -77,7 +77,7 @@ def _register_parser(endpoint: str, type_: type[looting.GetterOutputTypeVar]):
         type_:
             Typ generické třídy GetterOutput, který funkce přijímá.
     """
-    LOGGER.debug("New parser registred for endpoint '%s' (Type: %s)", endpoint, type_)
+    LOGGER.debug("New parser registered for endpoint '%s' (Type: %s)", endpoint, type_)
 
     def decorator(
         func: Callable[
@@ -101,7 +101,7 @@ def _register_resolver(type_: type[BakalariObj]):
         type_:
             Typ/Třída, pro kterou je tato funkce resolverem.
     """
-    LOGGER.debug("New resolver registred for type %s", type_)
+    LOGGER.debug("New resolver registered for type %s", type_)
 
     def decorator(
         func: Callable[[BakalariAPI, UnresolvedID[BakalariObj]], BakalariObj]
@@ -115,7 +115,7 @@ def _register_resolver(type_: type[BakalariObj]):
 def _parse(
     getter_output: looting.GetterOutput[looting.GetterOutputTypeVar],
 ) -> looting.ResultSet:
-    """Extrahují se data z GetterOutput insance za pomoci registrovaných parserů.
+    """Extrahují se data z GetterOutput instance za pomoci registrovaných parserů.
 
     Data získaná skrze tuto metodu jsou automaticky ukládána v looting instanci.
     Pro běžné užití BakalářiAPI není tato funkce nutná. Pokud nevíte, jestli tuto
@@ -879,7 +879,7 @@ class BakalariAPI:
     def _parse(
         self, getter_output: looting.GetterOutput[looting.GetterOutputTypeVar]
     ) -> looting.ResultSet:
-        """Extrahují se data z GetterOutput insance za pomoci registrovaných parserů.
+        """Extrahují se data z GetterOutput instance za pomoci registrovaných parserů.
 
         Data získaná skrze tuto metodu jsou automaticky ukládána v looting instanci.
         Pro běžné užití BakalářiAPI není tato funkce nutná. Pokud nevíte, jestli tuto

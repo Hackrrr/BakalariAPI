@@ -365,8 +365,8 @@ def complex_deserialize(data: SerializedData) -> Any:
     except (TypeError, KeyError) as e:
         raise ValueError("Data nebyla serializována skrze komplexní serializaci") from e
     original_obj_list: list[SerializedData] = data["data"]["objects"]  # type: ignore
-    # Otáčíme list kvůli optimalizaci. Jelikož při serializaci dáváme do listu parrenty dřív jak childy,
-    # tak bychom se parrenty snažili deseriaizovat dřív jak childy (kdybychom list neotočili) a to by
+    # Otáčíme list kvůli optimalizaci. Jelikož při serializaci dáváme do listu parenty dřív jak childy,
+    # tak bychom se parenty snažili deseriaizovat dřív jak childy (kdybychom list neotočili) a to by
     # znamenalo, že bychom při deserializaci selhali. Př.:
     #   A má child B a B má child C. Po serializaci je list [A,B,C]. Při deserializaci bychom se pokusili
     #   deserializovat nejdříve A, což by nedopadlo, poté B, což znovu nepůjde a nakonec C, které konečně
