@@ -3,6 +3,11 @@ Všechny důležité změny v tomto projektu budou zdokumentovány v tomto soubo
 
 Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) a podléhá [Sémantickému verzování](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.1] - 19. 9. 2021
+
+### Fixed
+- Oprava instalace z PyPI
+
 ## [3.1.0] - 19. 9. 2021
 
 ### Added
