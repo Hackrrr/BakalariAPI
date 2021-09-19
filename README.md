@@ -28,3 +28,5 @@ Nejdříve WebDriver. WebDriver je technologie, která umožňuje ovládat prohl
 Nyní Selenium. Selenium je wrapper kolem WebDriveru. Dělá nám ~~pěkné~~ API k webdriveru, abychom nemuseli řešit "low-level" záležitosti (které jsou definované ve WebDriver standardu) a mohli volat jen nějakou funkci.
 
 A nakonec - proč tohle vůbec potřebujeme? Tak jak je napsáno výše, sestavit dotaz na ASP.NET formuláře není nejjednodušší, a proto takovéto dotazy doslova simulujeme - otevřeme prohlížeč, přejdeme na danou stránku, klikneme na tlačítko a voilà - úspěšně jsme vyřešili ASP.NET formuláře.
+
+Počkat. Vyřešili jsme sice problém, ale jen teoreticky, takže jak to vlastně zprovozním? Velice jednoduše - pro `bakalarishell` stačí při startu přidat argumenty `-b PROHLÍŽEČ` a `-e CESTA_K_WEBDRIVERU` (pokud webdriver není na `PATH`), např. `-b Chrome -e webdriver.exe`; pro `bakalariapi` je potřeba při inicializaci třídy `BakalariAPI` přidat instanci `SeleniumHandler` (a zbytek snad odvodíš podle parametrů).
