@@ -248,14 +248,6 @@ def deserialize(
         return data
     elif isinstance(data, dict):
         # Pokud je dict ...
-
-        # Pro kompatibilitu s verzemi před BakalářiAPI 3.0
-        # TODO: Bude odtraněno v jedné z následující verzích
-        if "_type" in data:
-            LOGGER.debug("Object have old structure, upgrading")
-            data["__type__"] = data["_type"]  # type: ignore
-            del data["_type"]  # type: ignore
-
         if is_typed_dict(data, SerializedData):
             # ... a zároveň je to (Raw)SerializedData TypedDict,
             # tak nejdříve zkotrolujeme, zda se jedná o komplexní serializaci ...

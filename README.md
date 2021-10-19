@@ -2,7 +2,7 @@
 `BakalářiAPI` je osobní projekt v Pythonu, který se snaží vytvořit jednoduchý způsob, jak pracovat s Bakaláři.
 
 # Status
-Přestože je aktuální verze `3.1.0`, `BakalářiAPI` se pořád často a poměrně drasticky mění. "Veřejná" část API tomuto nepodléhá, ale interní věci se mění prakticky neustále, a pokud je někdo užije, měl by mít na paměti, že je dost pravděpodobně, že v další verzi `BakalářiAPI` to nebude fungovat stejně. Jinak řečeno - prakticky každá verze je major, tzn., že pravděpodobně rozbije aplikace postavené na předchozí verzi.
+Přestože je aktuální verze `4.0`, `BakalářiAPI` se pořád často a poměrně drasticky mění. "Veřejná" část API tomuto nepodléhá, ale interní věci se mění prakticky neustále, a pokud je někdo užije, měl by mít na paměti, že je dost pravděpodobně, že v další verzi `BakalářiAPI` to nebude fungovat stejně. Jinak řečeno - prakticky každá verze je major, tzn., že pravděpodobně rozbije aplikace postavené na předchozí verzi.
 
 # Jak to funguje a co to umí?
 Je to jednoduché - tváříme jako "normální" uživatel, který využívá webové rozhraní aplikace Bakaláři a při tom si zapisuje vše podstatné. Většinu dokážeme udělat jen z prostých dotazů, jejichž výsledek následně zpracujeme, avšak jelikož Bakaláři využívají ASP.NET forms, tak jsou zde určité situace, kdy nelze jednoduše udělat dotaz vytvořit a pro takové situace se pokusí `BakalářiAPI` použít Selenium (pokud je nastaveno).

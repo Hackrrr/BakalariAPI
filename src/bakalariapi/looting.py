@@ -262,30 +262,3 @@ class Looting:
                     self.__add_one(obj)
         finally:
             self.__lock.release()
-
-    def export_json(self, *args, **kwargs):
-        # Pro kompatibilitu s verzemi před BakalářiAPI 4.0, náhrada je `.export_data()`
-        # TODO: Bude odtraněno v jedné z následující verzích
-        """Exportuje jako JSON data."""
-        return json.dumps(
-            serialization.complex_serialize(
-                {
-                    "data": self.data,
-                    "unresolved": self.unresolved,
-                }
-            ),
-            *args,
-            **kwargs,
-        )
-
-    def import_json(self, json_string: str, *args, **kwargs):
-        # Pro kompatibilitu s verzemi před BakalářiAPI 4.0, náhrada je `.import_data()`
-        # TODO: Bude odtraněno v jedné z následující verzích
-        """Importuje JSON data.
-
-        Upozornění: Importovaní dat ze zdrojů, kterým nedůvěřujete, může být nebezpečné.
-        Ačkoli je snaha o co největší bezpečnost, existuje zde bezpečnostní riziko.
-        """
-        parsed = serialization.deserialize(json.loads(json_string, *args, **kwargs))
-        self.data = parsed["data"]
-        self.unresolved = parsed["unresolved"]
