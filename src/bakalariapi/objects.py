@@ -96,7 +96,7 @@ class BakalariObject(SimpleSerializable, ABC, Upgradeable):
             Uchováván, aby bylo možné porovnávat stáří dat.
     """
 
-    _attributes = {"ID", "_date"}
+    deserialization_keys = {"ID", "_date"}
 
     def __init__(self, ID: str):
         self.ID = ID
@@ -128,13 +128,13 @@ class BakalariObject(SimpleSerializable, ABC, Upgradeable):
     def upgrade(
         cls,
         data: dict[str, Any],
-        missing_attributes: set[str],
-        redundant_attributes: set[str],
+        missing: set[str],
+        redundant: set[str],
     ) -> dict[str, Any]:
         # Data z verze před 3.1
-        if "_date" in missing_attributes:
+        if "_date" in missing:
             data["_date"] = datetime.min
-            missing_attributes.remove("_date")
+            missing.remove("_date")
         return data
 
 
@@ -367,7 +367,7 @@ class Meeting(BakalariObject, Upgradeable):
 
     Datetime instance v této tříde jsou offset-aware."""
 
-    _attributes = BakalariObject._attributes | {
+    deserialization_keys = BakalariObject.deserialization_keys | {
         "ownerID",
         "name",
         "content",
@@ -454,15 +454,12 @@ class Meeting(BakalariObject, Upgradeable):
     def upgrade(
         cls,
         data: dict[str, Any],
-        missing_attributes: set[str],
-        redundant_attributes: set[str],
+        missing: set[str],
+        redundant: set[str],
     ) -> dict[str, Any]:
-        data = super().upgrade(data, missing_attributes, redundant_attributes)
+        data = super().upgrade(data, missing, redundant)
         # Data z verze před 3.0
-        if (
-            "owner" in missing_attributes
-            and "participants_read_info" in redundant_attributes
-        ):
+        if "owner" in missing and "participants_read_info" in redundant:
             # Chybějící "owner", přebývající "participants_read_info",
             # "participants" je `list` namísto `dict` a nejsou zde `MeetingParticipant` instance
             participants: dict[str, MeetingParticipant] = {}

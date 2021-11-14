@@ -3,6 +3,21 @@ Všechny důležité změny v tomto projektu budou zdokumentovány v tomto soubo
 
 Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) a podléhá [Sémantickému verzování](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] - Unreleased
+### Added
+- Přidána možnost "inliningu" při komplexní serializaci (defaultně) - Reference, které odkazují na objekt, který je referencován pouze touto referencí se při "inliningu" nahradí referencovaným objektem
+
+### Changed
+- Změněna struktura komplexní serializace - Nyní je v `"data"` sekci komplexní serializace pouze list, root se nachází na poslední pozici v tomto listu
+- Atribut `serialization.Upgradeable._atributes` změněn na `serialization.Upgradeable.deserialization_keys`
+
+### Fixed
+- Opravena serializace `list` instancí
+
+
+### Deprecated
+- Data, která byla serilizována starší verzí, nebudou v dalších verzích podporována - aby data byla aktualizována na novou verzi, je potřeba je načíst a opětovně uložit
+
 ## [3.1.1] - 19. 9. 2021
 
 ### Fixed

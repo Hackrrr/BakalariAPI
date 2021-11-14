@@ -4,8 +4,12 @@ __all__ = [
     "register",
     "serialize",
     "deserialize",
+    "complex_serialize",
+    "complex_deserialize",
     "SerializedData",
     "Serializable",
+    "SimpleSerializable",
+    "Upgradeable",
 ]
 
 import copy
@@ -103,20 +107,22 @@ class Serializable(Protocol[TRawSerializableValue]):
 
 @runtime_checkable
 class Upgradeable(Protocol, metaclass=_CustomChecks):
-    _attributes: set[str]
+    deserialization_keys: set[str]
 
     @classmethod
     def upgrade(
         cls,
         data: dict[str, Any],
-        missing_attributes: set[str],
-        redundant_attributes: set[str],
+        missing: set[str],
+        redundant: set[str],
     ) -> dict[str, Any]:
         raise NotImplementedError()
 
     @classmethod
     def __subclasscheck__(cls, subclass):
-        return hasattr(subclass, "_attributes") and hasattr(subclass, "upgrade")
+        return hasattr(subclass, "deserialization_keys") and hasattr(
+            subclass, "upgrade"
+        )
 
 
 class SimpleSerializable(Serializable[dict[str, Any]]):
@@ -195,7 +201,7 @@ def serialize(
         else:
             output = copy.copy(obj)  # Pokaždé chceme, abychom vraceli novou hodnotu
         # obj = list(map(lambda x: serialize(x, True), obj))
-        return obj
+        return output
     else:
         type_ = type(obj)
         if isinstance(obj, Serializable):
@@ -260,9 +266,9 @@ def deserialize(
             type_ = resolve_string(data["__type__"])
             # Ověříme, zda je typ Upgradeable, případně upgradujeme.
             if isinstance(data["data"], dict) and issubclass(type_, Upgradeable):
-                actual = set(data.keys())
-                missing = type_._attributes - actual
-                redundant = actual - type_._attributes
+                actual = set(data["data"].keys())
+                missing = type_.deserialization_keys - actual
+                redundant = actual - type_.deserialization_keys
                 data["data"] = type_.upgrade(data["data"], missing, redundant)
             # Následně zkontrolujeme jestli typ implementuje Serializable protokol, ...
             if issubclass(type_, Serializable):
@@ -292,81 +298,186 @@ def deserialize(
                     output[key] = deserialize(value, recursive)
             return output
     elif isinstance(data, list):
-        output = []
+        output = [None] * len(data)
         for index, value in enumerate(data):
             output[index] = deserialize(value, recursive) if recursive else value
         return output
     raise ValueError
 
 
-def complex_serialize(data: object) -> SerializedData:
-    obj_list: list[SerializedData] = []
+class Reference(TypedDict):
+    __type__: Literal["@"]
+    data: int
 
-    def generate_ref(id: int) -> SerializedData:
-        return {
-            "__type__": "@",
-            "data": id,
-        }
 
-    identity2id: dict[int, int] = {}
+class ReferenceData:
+    reference: Reference
+    count: int
+    first_parent: Mapping | list | None
+    first_key: str | int | None
 
-    def recursion(obj):
-        # Jen kvůli optimalizaci, jelikož by stejně `SerializablePrimitive` skončil
-        # v "else" větvi, odkud se jen vrátí (tzn., že to bude fungovat i bez tohoto)
+    def __init__(
+        self,
+        reference: Reference,
+        parent: Mapping | list | None,
+        key: str | int | None,
+    ):
+        self.reference = reference
+        self.count = 1
+        self.first_parent = parent
+        self.first_key = key
+
+    def is_root_reference(self) -> bool:
+        return self.first_parent == None
+
+
+def complex_serialize(data: object, *, inlining: bool = True) -> SerializedData:
+    # Poprvé, co potřebuji poctivě okomentovat kód, protože tady je to vážně potřeba...
+
+    # Nejdříve deklarovat potřebné věci:
+    #   - `obj_list` je list výsledných (serializovaných) dat
+    #   - `references` je slovník uchovávající reference (resp. ReferenceData) dle identity daného
+    #   objektu (v `obj_list`), na který ukazují (viz `get_ref()`)
+    obj_list: list[SerializableValue] = []
+    references: dict[int, ReferenceData] = {}
+
+    # Pomocná funkce pro generování referencí.
+    # Všechny reference na stejný index/objekt by měli být stejné, tzn. že na pro daný index/objekt
+    # vytvoříme referenci jen jednou, v další případech vracíme již tu onu vytvořenou referenci.
+    # Tohle je potřeba kvůli následému inliningu, abychom nemuseli prohledávat vše co jsme serializovali (viz inlining dále).
+    def get_ref(
+        identity: int,
+        parent: Mapping | list | None,
+        key: str | int | None,
+        index: int | None = None,
+    ) -> Reference:
+        if identity in references:
+            # Pokud reference již existuje, jen zaznamenáme, že je použita znovu
+            references[identity].count += 1
+        else:
+            # Pokud reference na daný objekt ještě neexistuje, vytvoříme
+            if index is None:  # type guard jen kvůli typingu
+                raise ValueError()
+            reference: Reference = {
+                "__type__": "@",
+                "data": index,
+            }
+            references[identity] = ReferenceData(reference, parent, key)
+        return references[identity].reference
+
+    # V podstatně serializace samotná
+    def recursion(
+        obj,
+        upper_parent: Mapping | list | None,
+        upper_key: str | int | None,
+        nested: bool = False,
+    ) -> SerializableValue:
+        # Pokud je primitive, můžeme vrátit rovnou - serializovat nepotřebujeme, reference neřešíme
         if is_union(obj, SerializablePrimitive):
             return obj
 
-        # Pokud je už objekt serializovaný, znovu serializovat nebudeme
-        if id(obj) in identity2id:
-            return generate_ref(identity2id[id(obj)])
+        # Pokud je už objekt serializovaný, znovu serializovat nebudeme a vrátíme
+        # referenci na již serializovaný objekt.
+        # `upper_parent is not None` je optimalizace - pokud je `None`, tak je buď root
+        # a nebo "`nested`" (viz dále) a v obou případech víme, že `id(obj) in references`
+        # bude `False` a nemusíme kvůli tomu tedy prohledávát celý `references`.
+        if upper_parent is not None and id(obj) in references:
+            return get_ref(id(obj), upper_parent, upper_key)
 
+        # "`nested`" je speciální případ, který nastane serializování `(Raw)SerializedData`.
+        # Když serializujeme `SerializedData["data"]` nechceme vracet (ani vytvářet) referenci,
+        # jelikož víme, že tenhle objekt bude jen jednou (protože je to objekt, který jsme
+        # si vytvořili sami a my víme, že ho nikde jinde používat nebudeme).
+        if not nested:
+            # Pokud není "`nested`", vygenerujeme si referenci
+            r = get_ref(id(obj), upper_parent, upper_key, -1)
+
+        # Nyní serializujeme data a pokud výsledkem bude `list` nebo `dict`,
+        # budeme volat `recursion()` na jejich hodnoty. Pokud bude výsledkem
+        # `(Raw)SerializedData`, budeme volat `recursion(nested=True)` na klíč "data"
         serialized: SerializableValue | RawSerializedData = serialize(obj, False)
 
-        if isinstance(serialized, dict):
-            if is_typed_dict(serialized, RawSerializedData):
-                identity2id[id(obj)] = len(obj_list)
-                # Musíme přidat objekt do `obj_list` teď hned, ačkoli je v tuto chvíli
-                # pořád ještě `RawSerializableData`. Resp. potřebujeme objket přidat
-                # předtím, než spustíme další iteraci rekurze, jelikož jinak budou všechny
-                # refence referencovat na objekt 0 (protože list bude pořád prázdný)
-                obj_list.append(serialized)  # type: ignore # Na `SerializedData` se mění následují řádkou
-                serialized["data"] = recursion(serialized["data"])
-                return generate_ref(identity2id[id(obj)])
-            else:
-                for key, value in serialized.items():
-                    serialized[key] = recursion(value)
-                return serialized
-        elif isinstance(serialized, list):
+        if isinstance(serialized, list):
+            # list
             for index, value in enumerate(serialized):
-                serialized[index] = recursion(value)
-            return serialized
+                serialized[index] = recursion(value, serialized, index)
+        elif is_typed_dict(serialized, RawSerializedData):
+            # RawSerializableData
+            serialized["data"] = recursion(serialized["data"], None, None, True)
+        elif isinstance(serialized, dict):
+            # dict
+            for key, value in serialized.items():
+                serialized[key] = recursion(value, serialized, key)
+        else:
+            # Funkce `serialize()` by měla v tomto případě vždy vrátit list nebo slovník.
+            # Teoreticky by měla vrátit `SerializableValue`. `SerializableValue` je ale buď
+            # `SerializablePrimitive`, `dict` nebo `list`, a tak, protože `SerializablePrimitive`
+            # vzniká serializací sama sebou a `SerializablePrimitive` filtrujeme na začátku,
+            # nám zůstává pouze `dict` a `list`.
+            # Čistě teoreticky by tady else větev nemusela být, ale je tu jakožto sanity check.
+            raise RuntimeError("serialize() returned something else than list or dict")
+
+        # Když je "`nested`", nechceme referenci (viz výš) nýbrž samotný serializovaný objekt
+        if not nested:
+            r["data"] = len(obj_list)  # type: ignore
+            obj_list.append(serialized)
+            return r  # type: ignore
         else:
             return serialized
 
+    # Spustíme serializaci
+    recursion(data, None, None)
+
+    # Nyní případný inlining
+    if inlining:
+        # `inlined` je list indexů `obj_list`u, které jsou/budou inlined
+        inlined: list[int] = []
+        # Kvůli optimalizaci chceme procházet reference seřazeně podle indexu na který odkazují
+        for reference_data in sorted(
+            references.values(), key=lambda x: x.reference["data"]
+        ):
+            reference_data = cast(ReferenceData, reference_data)
+            # Jelikož objekty, které jsou/budou inlined odstraníme, tak musíme pozměnit indexy,
+            # na které se odkazuje o tolik, kolik odstraníme objektů před referencovaným objektem,
+            # což se rovná velikosti `inlined`, protože máme reference seřazené
+            reference_data.reference["data"] -= len(inlined)
+            if not reference_data.is_root_reference() and reference_data.count == 1:
+                # `+ len(inilined)` protože potřebujme "neutralizovat" předchozí změnu
+                referenced_index = reference_data.reference["data"] + len(inlined)
+                # Tohle je samotný inlining objektu - na místo reference dáváme referencovaný objekt
+                reference_data.first_parent[reference_data.first_key] = obj_list[referenced_index]  # type: ignore
+                # Zaznamenání, že referencovaný objekt je již inlined
+                inlined.append(referenced_index)
+
+        # To co je inlined můžeme odstranit
+        # Chceme to dělat od největšího, jelikož jinak by se vždy reindexoval list
+        # což nechceme, protože výkon a navíc bychom museli počítat se změnou indexů
+        for index in sorted(inlined, reverse=True):
+            del obj_list[index]
+
+    # Vracíme root komplexní serializace ("__type__" == "/")
     return {
         "__type__": "/",
-        "data": {"objects": obj_list, "structure": recursion(data)},
+        "data": obj_list,
     }
 
 
 # Vracíme `Any`, jelikož k tomu jsou type checkery shovívavější jak k `object`
 def complex_deserialize(data: SerializedData) -> Any:
-    try:
-        if "objects" not in data["data"] or "structure" not in data["data"]:  # type: ignore # Případné věci odchytáváme
-            raise KeyError
-    except (TypeError, KeyError) as e:
-        raise ValueError("Data nebyla serializována skrze komplexní serializaci") from e
-    original_obj_list: list[SerializedData] = data["data"]["objects"]  # type: ignore
-    # Otáčíme list kvůli optimalizaci. Jelikož při serializaci dáváme do listu parenty dřív jak childy,
-    # tak bychom se parenty snažili deseriaizovat dřív jak childy (kdybychom list neotočili) a to by
-    # znamenalo, že bychom při deserializaci selhali. Př.:
-    #   A má child B a B má child C. Po serializaci je list [A,B,C]. Při deserializaci bychom se pokusili
-    #   deserializovat nejdříve A, což by nedopadlo, poté B, což znovu nepůjde a nakonec C, které konečně
-    #   deserializovat můžeme. Při druhé iteraci bychom opět nemohli nic udělat s A, nýbrž jen s B. Vše
-    #   by bylo deserializováno až při třetí iteraci.
-    # Pokud ale list otočíme, tohle se nestane a vše lze deserializovat v jedné iteraci. Musíme ale
-    # příslušně modifikovat `reference_id`, aby brali v potaz otočený list.
-    original_obj_list = original_obj_list[::-1]
+    # Kompatibilita pro data před v4.0
+    legacy: bool = False
+    if (
+        isinstance(data["data"], dict)
+        and "objects" in data["data"]
+        and "structure" in data["data"]
+    ):
+        legacy = True
+        original_obj_list: list[SerializedData] = data["data"]["objects"][::-1] + [
+            data["data"]["structure"]
+        ]
+    else:
+        original_obj_list: list[SerializedData] = data["data"]  # type: ignore
+
     real_obj_list: list[object] = [None] * len(original_obj_list)
 
     class NotDeserializedYet(Exception):
@@ -377,35 +488,41 @@ def complex_deserialize(data: SerializedData) -> Any:
     def recursion(data):
         if isinstance(data, dict):
             if is_typed_dict(data, SerializedData):
-                # V tuhle chvíli to může být pouze reference, jelikož jinak by to byl samostaný objekt
-                if data["__type__"] != "@":
-                    raise ValueError(
-                        f"Očekáván interní typ reference, ale nalezen typ '{data['__type__']}'"
+                if data["__type__"] == "@":
+                    # Mělo by to být `int`, pokud to nikdo externě nezměnil
+                    reference_index = cast(int, data["data"])
+                    if legacy:
+                        reference_index = len(original_obj_list) - 2 - reference_index
+                    LOGGER.debug(
+                        "Při komplexní deserializaci byla nalezena reference na ID %s",
+                        reference_index,
                     )
-                # Pokud si s daty nikdo nehrál, mělo by to být `int`
-                reference_id = cast(int, data["data"])
-                reference_id = len(original_obj_list) - 1 - reference_id
-                LOGGER.debug(
-                    "Při komplexní deserializaci byla nalezena reference na ID %s",
-                    reference_id,
-                )
-                if real_obj_list[reference_id] is None:
-                    raise NotDeserializedYet(reference_id)
+                    if real_obj_list[reference_index] is None:
+                        raise NotDeserializedYet(reference_index)
+                    else:
+                        return real_obj_list[reference_index]
                 else:
-                    return real_obj_list[reference_id]
+                    try:
+                        deserialized = recursion(data["data"])
+                    except NotDeserializedYet as e:
+                        raise e
+                    else:
+                        return deserialize(
+                            {"__type__": data["__type__"], "data": deserialized}, False
+                        )
             else:
                 # Odescapujeme klíče, které jsem escapovali při serializaci
                 output = {}
                 for key in data.keys():
                     output[key[1:] if key.startswith("#") else key] = data[key]
-
                 for key, value in output.items():
                     output[key] = recursion(value)
                 return output
         elif isinstance(data, list):
+            output = [None] * len(data)
             for index, value in enumerate(data):
-                data[index] = recursion(value)
-            return data
+                output[index] = recursion(value)  # type: ignore # Pyrightu se asi nelíbí dvojí deklarace `output` v kombinaci s tím, že si zde odvodí typ `list[None]`
+            return output
         else:
             return deserialize(data)
 
@@ -417,14 +534,12 @@ def complex_deserialize(data: SerializedData) -> Any:
         for index, obj in enumerate(original_obj_list):
             if real_obj_list[index] is None:
                 try:
-                    deserialized = recursion(obj["data"])
+                    deserialized = recursion(obj)
                 except NotDeserializedYet as e:
                     is_everything_resolved = False
                     current_unresolved.append((index, e.ref_id))
                 else:
-                    real_obj_list[index] = deserialize(
-                        {"__type__": obj["__type__"], "data": deserialized}, False
-                    )
+                    real_obj_list[index] = deserialized
         if is_everything_resolved:
             break
         if current_unresolved == last_unresolved:
@@ -450,7 +565,9 @@ def complex_deserialize(data: SerializedData) -> Any:
             # jestli je takového API vhodné a v tuto chvíli je tedy pro mě toto
             # featura s nízkou prioritou. (Navíc mám tušení, že se něco extrémně
             # pokazí (jako vždy) a nebude to tak pěkné, jak jsem tady načrtl.)
-            raise RecursionError("Detekována rekurze při deserializaci")
+            raise RecursionError(
+                f"Detekována rekurze při deserializaci ({current_unresolved})"
+            )
         else:
             last_unresolved = current_unresolved
             LOGGER.debug(
@@ -458,7 +575,7 @@ def complex_deserialize(data: SerializedData) -> Any:
                 len(current_unresolved),
             )
 
-    return recursion(data["data"]["structure"])  # type: ignore
+    return real_obj_list[-1]
 
 
 ### Předdefinované serializery ###
