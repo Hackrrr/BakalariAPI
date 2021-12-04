@@ -26,7 +26,7 @@ LOGGER = logging.getLogger("bakalariapi")
 LOGGER.addHandler(logging.NullHandler())
 
 __all__ = ["Endpoint", "BakalariAPI", "LAST_SUPPORTED_VERSION", "GetMode"]
-LAST_SUPPORTED_VERSION = "1.43.824.1"
+LAST_SUPPORTED_VERSION = "1.44"
 
 
 class Endpoint:
@@ -187,8 +187,6 @@ def _resolve(
 def is_version_supported(version: str):
     """Zkontroluje, jestli `BakaláriAPI` podporuje danou verzi Bakalářů.
 
-    V současné chvíli pouze ověřuje, zda verze Bakalářů je shodná s `LAST_SUPPORTED_VERSION`.
-
     Args:
         version:
             Verze, která se má zkontrolovat.
@@ -196,7 +194,7 @@ def is_version_supported(version: str):
     Returns:
         Vrátí `True` pokud se shodují, jinak `False`.
     """
-    return version == LAST_SUPPORTED_VERSION
+    return version.startswith(LAST_SUPPORTED_VERSION)
 
 
 class GetMode(Enum):
@@ -360,8 +358,6 @@ class BakalariAPI:
 
     def is_version_supported(self):
         """Zkontroluje, jestli `BakaláriAPI` podporuje verzi Bakalářů, která je na serveru.
-
-        V současné chvíli pouze ověřuje, zda verze Bakalářů je shodná s `LAST_SUPPORTED_VERSION`.
 
         Returns:
             Vrátí `True` pokud se shodují, jinak `False`.

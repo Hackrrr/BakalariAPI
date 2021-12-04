@@ -18,6 +18,7 @@ from typing import IO, TYPE_CHECKING, Any, Callable, cast
 
 import bakalariapi
 import platformdirs
+import requests
 import rich
 from bakalariapi.utils import parseHTML
 from prompt_toolkit.input import create_input
@@ -315,9 +316,9 @@ def get_io_file(file: str, create_file: bool, mode: str = "r+") -> IO:
         if not create_file:
             raise FileNotFoundError()
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "x"):
+        with open(path, "x", encoding="utf-8"):
             pass
-    return open(path, mode)
+    return open(path, mode, encoding="utf-8")
 
 
 def save_config():
@@ -335,7 +336,7 @@ def save_config():
 def Init():
     def partial_init_mode():
         rich_print(
-            "\nInicilizace neproběhla úspěšně a shell poběží v omezeném módu.",
+            "\nInicilizace neproběhla úspěšně a shell poběží v omezeném módu.\nPro přepnutí do plného módu zkuste opětovat inicializaci pomocí příkazu 'init'.",
             color="yellow",
         )
 
@@ -365,39 +366,40 @@ def Init():
             args.password = ""
         api.password = args.password
 
-    rich_print(
-        f"Kontrola stavu serveru/webu [cyan]{api.server_info.url}[/cyan]...",
-        highlight=False,
-    )
     try:
-        if not api.is_server_running():
+        rich_print(
+            f"Kontrola stavu serveru a přihlašovacích údajů pro uživatele [cyan]{api.username}[/cyan]...",
+            highlight=False,
+        )
+        try:
+            if not api.is_login_valid():
+                rich_print("Přihlašovací údaje jsou neplatné", color="red")
+                partial_init_mode()
+                return
+        except requests.exceptions.RequestException:
             try:
-                if dialog_ano_ne(
-                    "Server/web (pravděpodobně) neběží; Chce se pokusit naimportovat data z předchozího souboru?",
-                    True,
-                    "yellow",
-                ):
-                    Command_Import()
+                if args.no_import:
+                    if dialog_ano_ne(
+                        "Server Bakalářů neběží; Chce se pokusit naimportovat data z předchozího souboru?",
+                        True,
+                        "yellow",
+                    ):
+                        Command_Import()
+                    else:
+                        partial_init_mode()
+                        return
                 else:
+                    rich_print("Server Bakalářů neběží", color="yellow")
                     partial_init_mode()
                     return
             except KeyboardInterrupt:
                 partial_init_mode()
                 return
-        rich_print("Sever/web běží", color="green")
-        rich_print(
-            f"Kontrola přihlašovacích údajů pro uživatele [cyan]{api.username}[/cyan]...",
-            highlight=False,
-        )
-        if not api.is_login_valid():
-            rich_print("Přihlašovací údaje jsou neplatné", color="red")
-            partial_init_mode()
-            return
     except KeyboardInterrupt:
         rich_print("Inicializace byla předčasně ukončena", color="yellow")
         partial_init_mode()
         return
-    rich_print("Přihlašovací údaje ověřeny a jsou správné", color="green")
+    rich_print("Server běží a přihlašovací údaje jsou správné", color="green")
     print("Nastavuji...")
     try:
         with warnings.catch_warnings():
@@ -1069,7 +1071,7 @@ def main():
         else f"[bright_cyan]{bakalariapi.__version__}[/bright_cyan]"
     )
 
-    lasttime: datetime | None = None
+    lasttime: datetime = datetime.max
     try:
         with get_io_file(TIME_FILE, False) as f:
             lasttime = datetime.fromisoformat(f.read())
@@ -1140,7 +1142,7 @@ def main():
         def task_komens(api: bakalariapi.BakalariAPI, progress_bar: ProgressBarCounter):
             unresolved = api._parse(
                 bakalariapi.modules.komens.getter_komens_ids(
-                    api, from_date=None if lasttime is None else lasttime - timedelta(1)
+                    api, from_date=None if lasttime is None else lasttime - timedelta(5)
                 )
             ).get(bakalariapi.UnresolvedID)
             if len(unresolved) == 0:
@@ -1216,6 +1218,7 @@ def main():
         autorun()
 
     if "exit" not in args.commands and (not args.no_import or args.auto_run):
+        print()
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         today_aware = (
             datetime.now()
@@ -1224,16 +1227,16 @@ def main():
         )
 
         first = True
-        for komens in filter(
-            lambda x: x.date1 < today - timedelta(5) and x.grade != "?",
+        for znamka in filter(
+            lambda x: min(lasttime, today - timedelta(5)) < x.date1 and x.grade != "?",
             api.looting.get(bakalariapi.Grade),
         ):
             if first:
                 first = False
                 print("Poslední známky:")
-            note = komens.note1.strip() or komens.note2.strip()
+            note = znamka.note1.strip() or znamka.note2.strip()
             rich_print(
-                f"Z předmětu [magenta]{komens.subject}[/magenta] známka [bright_green]{komens.grade}[/bright_green] ze dne {komens.date1.strftime('%d. %m. %Y')}"
+                f"Z předmětu [magenta]{znamka.subject}[/magenta] známka [bright_green]{znamka.grade}[/bright_green] ze dne {znamka.date1.strftime('%d. %m. %Y')}"
                 + ("" if note == "" else f" - {note}")
             )
 
@@ -1268,29 +1271,29 @@ def main():
                 print("Úkoly:")
             ukol._sort_by_date
             rich_print(
-                f"Z předmětu {ukol.subject} na {ukol.submission_date.strftime('%d. %m.')} - {ukol.content}"
+                f"Z předmětu [magenta]{ukol.subject}[/magenta] na {ukol.submission_date.strftime('%d. %m.')} - {ukol.content}"
             )
 
         first = True
-        for komens in filter(
+        for znamka in filter(
             lambda x: (x.need_confirm and not x.confirmed)
-            or x.time < today - timedelta(5),
+            or min(lasttime, today - timedelta(5)) < x.time,
             api.looting.get(bakalariapi.Komens),
         ):
             if first:
                 first = False
                 print("Komens zprávy:")
             rich_print(
-                f"Komens zpráva od [magenta]{komens.sender}[/magenta] z {komens.time.strftime('%H:%M %d. %m. %Y')}"
+                f"Komens zpráva od [magenta]{znamka.sender}[/magenta] z {znamka.time.strftime('%H:%M %d. %m. %Y')}"
                 + (
                     " [yellow](nepotvrzená)[/yellow]"
-                    if (komens.need_confirm and not komens.confirmed)
+                    if (znamka.need_confirm and not znamka.confirmed)
                     else ""
                 )
             )
 
-        # with get_io_file(TIME_FILE, True) as f:
-        #     f.write(datetime.now().isoformat())
+        with get_io_file(TIME_FILE, True) as f:
+            f.write(datetime.now().isoformat())
 
     if len(args.commands) != 0:
         print("Vykonávám zadané příkazy...")

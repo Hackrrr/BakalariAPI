@@ -8,14 +8,18 @@ Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 ### Added
 - Přidána možnost "inliningu" při komplexní serializaci (defaultně) - Reference, které odkazují na objekt, který je referencován pouze touto referencí se při "inliningu" nahradí referencovaným objektem; více informací v [dokumentu o serializaci](/Dokumentace/BakalariAPI/serializace.md#Inlining).
 - `bakalarishell` nyní automaticky importuje předešlá data; Lze vypnout novým parametrem `--no-import`
+- `bakalarishell` nyní po zapnutí vypíše obecné shrnutí
 
 ### Changed
 - Změněna struktura komplexní serializace - Nyní je v `"data"` sekci komplexní serializace pouze list, root se nachází na poslední pozici v tomto listu
 - Atribut `serialization.Upgradeable._atributes` změněn na `serialization.Upgradeable.deserialization_keys`
 - Serializace se nyní chová k `list` a `dict` instancím stejně jako k jiným objektům, tzn. vytváření referencí na tyto instance
+- Lepší porovnávání podporované verze Bakalářů a hranice zvýšena na "1.44"
+- `bakalarishell` nyní všechny soubory vytváří s utf-8 kódováním; Tohle je drastická změna a bohužel může nastat situace, kdy nastane `UnicodeDecodeError` při importu starých dat. V tom případě je potřeba manuálně změnit kódování starých souborů na utf-8.
 
 ### Fixed
 - Opravena serializace `list` instancí
+- Opraven `SeleniumHandler`
 
 ### Deprecated
 - Data, která byla serilizována starší verzí, nebudou v dalších verzích podporována - aby data byla aktualizována na novou verzi, je potřeba je načíst a opětovně uložit

@@ -33,6 +33,7 @@ class SeleniumHandler:
         self.browser: Browser = browser
         self.executable_path: str | None = executable_path
         self.params: dict = {} if params is None else params
+        self.build_params()
 
     def open(self, try_silent: bool = True) -> WebDriver:
         """Spustí a vrátí WebDriver instanci"""
