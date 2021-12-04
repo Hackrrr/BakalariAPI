@@ -14,7 +14,7 @@ import warnings
 import webbrowser
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import IO, Any, Callable, cast
+from typing import IO, TYPE_CHECKING, Any, Callable, cast
 
 import bakalariapi
 import platformdirs
@@ -37,10 +37,13 @@ from rich.traceback import install as tb_install
 # Pozn.: Pokud někdo dumá nad tím, proč zde tedy není jen druhá možnost, tak to je
 # kvůli tomu, že ta zase pro změnu nefugnuje při importu jako modul, jelikož v tom případě
 # hledá modul `shell` jako "globální" modul (ne jako "lokální" ve složce), tudíž selže.
-try:
+if TYPE_CHECKING:
     from . import shell
-except ImportError:
-    import shell  # type: ignore # Aby nebylo mypy nešťastné ohledně "redefinování" shellu
+else:
+    try:
+        from . import shell
+    except ImportError:
+        import shell
 
 tb_install(show_locals=True)
 cls = shell.cls
@@ -50,7 +53,8 @@ shell_instance: shell.Shell
 dirs = platformdirs.PlatformDirs(
     appauthor="BakalariAPI", appname="bakalarishell", roaming=True
 )
-CONFIG_FILE_PATH = os.path.join(dirs.user_config_dir, "config.json")
+CONFIG_FILE = "config.json"
+TIME_FILE = "_lasttime"
 
 
 @dataclass
@@ -67,6 +71,7 @@ class Args:
     test: int | None = None
     auto_run: bool = False
     no_init: bool = False
+    no_import: bool = False
     disable_config: bool = False
 
     commands: list[str] = field(default_factory=list)
@@ -299,9 +304,13 @@ async def keyhandler(
             await evnt.wait()
 
 
+def get_io_filepath(file: str) -> str:
+    return os.path.join(dirs.user_data_dir, file)
+
+
 def get_io_file(file: str, create_file: bool, mode: str = "r+") -> IO:
     """Vrátí file handler na daný soubor `file` v uživatelské (data) složce."""
-    path = os.path.join(dirs.user_data_dir, file)
+    path = get_io_filepath(file)
     if not os.path.exists(path):
         if not create_file:
             raise FileNotFoundError()
@@ -312,11 +321,7 @@ def get_io_file(file: str, create_file: bool, mode: str = "r+") -> IO:
 
 
 def save_config():
-    if not os.path.exists(CONFIG_FILE_PATH):
-        os.makedirs(os.path.dirname(CONFIG_FILE_PATH), exist_ok=True)
-        with open(CONFIG_FILE_PATH, "x"):
-            pass
-    with open(CONFIG_FILE_PATH, "w") as f:
+    with get_io_file(CONFIG_FILE, True) as f:
         # Indent, protože chci, aby to šlo přehledně upravit i z editoru (i když k tomu nejspíše nikdy nedojde)
         # (a navíc alespoň nemusí řešit formátování při "config show")
         json.dump(args.__dict__, f, indent=4)
@@ -635,7 +640,7 @@ def Command_Konec(nice: bool = True):
 def Command_Export(file_name: str = "main"):
     print("Generace JSON dat...")
     with get_io_file(file_name, True) as f:
-        f.write(json.dumps(api.looting.export_data(), ensure_ascii=False))
+        json.dump(api.looting.export_data(), f, ensure_ascii=False)
         # Odstraníme data, která jsou případně po JSONu, co jsme teď napsali (třeba pozůstatek po předchozím JSONu, pokud byl delší jak náš současný)
         f.truncate()
     print(f"JSON data vygenerována a zapsána do souboru '{file_name}'")
@@ -656,38 +661,36 @@ def Command_Import(file_name: str = "main"):
 
 def Command_Config(namespace: dict[str, Any]):
     cmd = namespace["cmd"]
+    config_path = get_io_filepath(CONFIG_FILE)
     if cmd == "show":
-        if not os.path.exists(CONFIG_FILE_PATH):
-            print("Žádná konfigurace není uložená")
+        if os.path.exists(config_path):
+            with open(config_path, "r") as f:
+                rich_print(Syntax(f.read(), "json"))
         else:
-            with open(CONFIG_FILE_PATH, "r") as f:
-                c = Console()
-                c.print(Syntax(f.read(), "json"))
+            print("Žádná konfigurace není uložená")
     elif cmd == "save":
         save_config()
         print("Konfigurace uložena")
     elif cmd == "remove":
-        if os.path.exists(CONFIG_FILE_PATH):
-            os.remove(CONFIG_FILE_PATH)
+        if os.path.exists(config_path):
+            os.remove(config_path)
             print("Konfigurace byla vymazána")
         else:
             print("Nic se nevykonalo, jelikož konfigurace není uložená")
     elif cmd == "check":
-        if os.path.exists(CONFIG_FILE_PATH):
-            s = os.stat(CONFIG_FILE_PATH)
-
-            s.st_mtime
+        if os.path.exists(config_path):
+            s = os.stat(config_path)
             rich_print(
                 f"Konfigurace je uložená z data {datetime.fromtimestamp(s.st_mtime).strftime('%d. %m. %Y, %H:%M:%S')}, velikost konfigurace je {s.st_size}B"
             )
         else:
             print("Žádná konfigurace není uložená")
     elif cmd == "open":
-        dirname = os.path.dirname(CONFIG_FILE_PATH)
-        if not os.path.exists(dirname):
-            print("Nelze otevřít konfigurační složku, jelikož neexistuje")
-        else:
+        dirname = os.path.dirname(config_path)  # = dirs.user_data_dir()
+        if os.path.exists(dirname):
             webbrowser.open(os.path.realpath(dirname))
+        else:
+            print("Nelze otevřít konfigurační složku, jelikož neexistuje")
 
 
 ##################################################
@@ -892,9 +895,7 @@ def main():
 
     def load_args_from_config() -> dict | None:
         global args
-        if not os.path.exists(CONFIG_FILE_PATH):
-            return None
-        with open(CONFIG_FILE_PATH, "r") as f:
+        with get_io_file(CONFIG_FILE, True) as f:
             parsed = json.load(f)
         return parsed
 
@@ -902,6 +903,8 @@ def main():
         description="Shell integrující funkcionalitu BakalářiAPI",
         epilog="Ano, ano, ano... Actually je to web scraper, ale API zní líp :)",
     )
+    if parser.prog == "":
+        parser.prog = "bakalarishell"
     parser.add_argument(
         "url",
         help="URL na bakaláře (př. https://bakalari.skola.cz); Pokud není tento argument přítomen, program se zeptá za běhu",
@@ -963,9 +966,16 @@ def main():
         default=None,
     )
     parser.add_argument(
+        "--no-import",
+        help="Pokud je tato flaga přítomna, nebude proveden import dat (z hlavního souboru)",
+        action="store_true",
+        dest="no_import",
+        default=None,
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
-        help="Zapne shell v 'ukecaném módu'; Lze opakovat vícekrát pro větší 'ukecanost' (max 5).",
+        help="Zapne shell v 'ukecaném módu'; Lze opakovat vícekrát pro větší 'ukecanost' (max 5)",
         action="count",
         default=None,
     )
@@ -1050,7 +1060,39 @@ def main():
     # Chceme `main()` locals, ne `prepare_shell()` locals
     shell_instance.PYTHON_EXEC_LOCALS = locals()
 
+    print()
+
+    rich_print(
+        f"Bakalarishell připraven - verze BakalářiAPI je "
+        + f"[green_yellow]{bakalariapi.__version__}[/green_yellow]"
+        if "dev" in bakalariapi.__version__
+        else f"[bright_cyan]{bakalariapi.__version__}[/bright_cyan]"
+    )
+
+    lasttime: datetime | None = None
+    try:
+        with get_io_file(TIME_FILE, False) as f:
+            lasttime = datetime.fromisoformat(f.read())
+    except FileNotFoundError:
+        pass
+
+    if not args.no_import:
+        try:
+            with get_io_file("main", False) as f:
+                api.looting.import_data(json.loads(f.read()))
+        except FileNotFoundError:
+            pass
+
     if args.auto_run:
+        # TL;DR - Autorun původně měl fungovat odlišně, proto existuje následují slohovka, která
+        # se zabývá (nyní) zdánlivě primitivní věcí.
+        # Původní nápad, který se ještě nejspíše pokusím někdy řešit, byl, že by bylo možné mít
+        # aktivní shell během autorunu - a proto následující text vůbec existuje. Implementovat
+        # autorun tak jak je teď (= když běží autorun, tak není spuštěn shell) je triviální úkol,
+        # a jsem trochu smutný z toho, že jsem to nakonec musel udělat takhle, ale co už eShrug.
+        # Co tímhle chci sdělit je to, že následující text pojednává o problému, který ze
+        # současného pohledu neexistuje.    S pozdravem, moje Já z budoucnosti (relativně k textu)
+
         # Takže... Tohle bude, je a už i byl pain - strávil jsem na tomto X dnů a pořád jsem to
         # nezprovoznil. V tuhle chvíli prohlašuji, že to nejde. Dle mého jsem zkusil vše - různě umístěný
         # patch_stdout, různě umístěný ProgressBar(), rozdílé místa, odkud se volají různé thready. Jsou
@@ -1085,39 +1127,54 @@ def main():
         # BakalářiAPI) a IDK jestli pak nenastane stejný problém.
 
         def task_ukoly(api: bakalariapi.BakalariAPI, progress_bar: ProgressBarCounter):
-            length = len(api.get_homeworks(bakalariapi.GetMode.FRESH, fast_mode=True))
+            length = max(
+                len(api.get_homeworks(bakalariapi.GetMode.FRESH, fast_mode=True)), 1
+            )
             progress_bar.total = length
             # 'item_completed()' dělá to, že zvýší 'items_completed' o 1 a zároveň volá 'invalidate()' na 'progress_bar' instanci, takže uděláme +/- to samé
             # (pozn. zde máme 'progress_bar' jako ProgressBarCounter, ale ProgressBarCounter má vlastní 'progress_bar')
             progress_bar.items_completed = length
             progress_bar.progress_bar.invalidate()
+            progress_bar.done = True
 
         def task_komens(api: bakalariapi.BakalariAPI, progress_bar: ProgressBarCounter):
             unresolved = api._parse(
-                bakalariapi.modules.komens.getter_komens_ids(api)
+                bakalariapi.modules.komens.getter_komens_ids(
+                    api, from_date=None if lasttime is None else lasttime - timedelta(1)
+                )
             ).get(bakalariapi.UnresolvedID)
-            progress_bar.total = len(unresolved)
-            for unresolved_id in unresolved:
-                api._resolve(unresolved_id)
+            if len(unresolved) == 0:
+                progress_bar.total = 1
                 progress_bar.item_completed()
+            else:
+                progress_bar.total = len(unresolved)
+                for unresolved_id in unresolved:
+                    api._resolve(unresolved_id)
+                    progress_bar.item_completed()
+            progress_bar.done = True
 
         def task_znamky(api: bakalariapi.BakalariAPI, progress_bar: ProgressBarCounter):
-            length = len(api.get_all_grades())
+            length = max(len(api.get_all_grades()), 1)
             progress_bar.total = length
             progress_bar.items_completed = length
             progress_bar.progress_bar.invalidate()  # viz task_ukoly
+            progress_bar.done = True
 
         def task_schuzky(
             api: bakalariapi.BakalariAPI, progress_bar: ProgressBarCounter
         ):
-            # unresolved = api._parse(bakalariapi.modules.meetings.getter_meetings_ids(api, datetime(1, 1, 1), datetime(9999, 12, 31, 23, 59, 59))).retrieve_type(bakalariapi.UnresolvedID)
             unresolved = api._parse(
                 bakalariapi.modules.meetings.getter_future_meetings_ids(api)
             ).get(bakalariapi.UnresolvedID)
-            progress_bar.total = len(unresolved)
-            for unresolved_id in unresolved:
-                api._resolve(unresolved_id)
+            if len(unresolved) == 0:
+                progress_bar.total = 1
                 progress_bar.item_completed()
+            else:
+                progress_bar.total = len(unresolved)
+                for unresolved_id in unresolved:
+                    api._resolve(unresolved_id)
+                    progress_bar.item_completed()
+            progress_bar.done = True
 
         class Task:
             def __init__(
@@ -1141,37 +1198,99 @@ def main():
         ]
 
         def autorun():
-            # Absolutně nevím, k čemu jsem se dostal a abosultně nemám tušení, co teď dělám - Jakože vůbec.
-            # Jen jsem se kouknul na nějakých 50 řádek asyncia (o kterým vím jen to, že to má být asynchroní)
-            # a usoudil, že tohle je ASI fix na neexistující event loop ve threadu (kvůli progress baru, který
-            # využívá funkci (z asyncia) 'get_event_loop()', která spoléhá na existující event loop (a pokud
-            # ho nemá, tak hází RuntimeError exception)).
-            # TL;DR: Pls někdo, kdo zná asyncio, to za mě opravte (někdo = nejspíše moje budoucí já, které se
-            # bude muset asyncio naučit)
-            # get_event_loop_policy().set_event_loop(get_event_loop_policy().new_event_loop())
-
             with ProgressBar("Úlohy po spuštění:") as progress_bar:
 
                 def task_runner(task: Task):
                     task.run(progress_bar(label=task.name))
 
-                threads = []
+                threads: list[threading.Thread] = []
                 for task in tasks:
                     thread = threading.Thread(target=task_runner, args=(task,))
                     threads.append(thread)
                     thread.start()
                 for thread in threads:
                     thread.join()
-                time.sleep(1)
 
         print()
         # threading.Thread(target=autorun).start()
         autorun()
 
-    print()
-    rich_print(
-        f"Bakalarishell aktivní - verze BakalářiAPI je [bright_cyan]{bakalariapi.__version__}[/bright_cyan]"
-    )
+    if "exit" not in args.commands and (not args.no_import or args.auto_run):
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_aware = (
+            datetime.now()
+            .astimezone()
+            .replace(hour=0, minute=0, second=0, microsecond=0)
+        )
+
+        first = True
+        for komens in filter(
+            lambda x: x.date1 < today - timedelta(5) and x.grade != "?",
+            api.looting.get(bakalariapi.Grade),
+        ):
+            if first:
+                first = False
+                print("Poslední známky:")
+            note = komens.note1.strip() or komens.note2.strip()
+            rich_print(
+                f"Z předmětu [magenta]{komens.subject}[/magenta] známka [bright_green]{komens.grade}[/bright_green] ze dne {komens.date1.strftime('%d. %m. %Y')}"
+                + ("" if note == "" else f" - {note}")
+            )
+
+        first = True
+        for komens in filter(
+            lambda x: x.grade == "?", api.looting.get(bakalariapi.Grade)
+        ):
+            if first:
+                first = False
+                print("Nadcházející klasifikace:")
+            rich_print(
+                f"Z předmětu [magenta]{komens.subject}[/magenta] na {komens.date1.strftime('%d. %m. %Y')}"
+            )
+
+        first = True
+        for schuzka in filter(
+            lambda x: today_aware < x.start_time
+            and x.start_time < today_aware + timedelta(2),
+            api.looting.get(bakalariapi.Meeting),
+        ):
+            if first:
+                first = False
+                print("Dnešní a zítřejší schůzky:")
+            rich_print(
+                f"{schuzka.start_time.strftime('%H:%M %d. %m. %Y')} - {'[bright_black]Neznámý[/bright_black]' if schuzka.owner is None else f'[magenta]{schuzka.owner.name}[/magenta]'} \"{schuzka.name.strip()}\""
+            )
+
+        first = True
+        for ukol in filter(lambda x: not x.done, api.looting.get(bakalariapi.Homework)):
+            if first:
+                first = False
+                print("Úkoly:")
+            ukol._sort_by_date
+            rich_print(
+                f"Z předmětu {ukol.subject} na {ukol.submission_date.strftime('%d. %m.')} - {ukol.content}"
+            )
+
+        first = True
+        for komens in filter(
+            lambda x: (x.need_confirm and not x.confirmed)
+            or x.time < today - timedelta(5),
+            api.looting.get(bakalariapi.Komens),
+        ):
+            if first:
+                first = False
+                print("Komens zprávy:")
+            rich_print(
+                f"Komens zpráva od [magenta]{komens.sender}[/magenta] z {komens.time.strftime('%H:%M %d. %m. %Y')}"
+                + (
+                    " [yellow](nepotvrzená)[/yellow]"
+                    if (komens.need_confirm and not komens.confirmed)
+                    else ""
+                )
+            )
+
+        # with get_io_file(TIME_FILE, True) as f:
+        #     f.write(datetime.now().isoformat())
 
     if len(args.commands) != 0:
         print("Vykonávám zadané příkazy...")
