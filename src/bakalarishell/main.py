@@ -27,6 +27,7 @@ from prompt_toolkit.keys import Keys
 from prompt_toolkit.shortcuts.progress_bar import ProgressBar, ProgressBarCounter
 from rich.console import Console
 from rich.logging import RichHandler
+from rich.progress import BarColumn, Progress, TaskID, TimeRemainingColumn
 from rich.syntax import Syntax
 from rich.traceback import install as tb_install
 
@@ -79,6 +80,41 @@ class Args:
 
 
 args: Args
+
+
+class RichTask:
+    def __init__(self, progress: Progress, task_id: TaskID) -> None:
+        self.progress = progress
+        self.task_id = task_id
+
+    def start(self):
+        self.progress.start_task(self.task_id)
+
+    def update(
+        self,
+        total: float | None = None,
+        completed: float | None = None,
+        advance: float | None = None,
+        description: str | None = None,
+        visible: bool | None = None,
+        refresh: bool = False,
+        **fields,
+    ):
+        self.progress.update(
+            self.task_id,
+            total=total,
+            completed=completed,
+            advance=advance,
+            description=description,
+            visible=visible,
+            refresh=refresh,
+            **fields,
+        )
+
+    def finish(self):
+        task = self.progress.tasks[self.task_id]
+        task.finished_time = 0
+
 
 ##################################################
 #####                 FUNKCE                 #####
@@ -1086,135 +1122,76 @@ def main():
             pass
 
     if args.auto_run:
-        # TL;DR - Autorun původně měl fungovat odlišně, proto existuje následují slohovka, která
-        # se zabývá (nyní) zdánlivě primitivní věcí.
-        # Původní nápad, který se ještě nejspíše pokusím někdy řešit, byl, že by bylo možné mít
-        # aktivní shell během autorunu - a proto následující text vůbec existuje. Implementovat
-        # autorun tak jak je teď (= když běží autorun, tak není spuštěn shell) je triviální úkol,
-        # a jsem trochu smutný z toho, že jsem to nakonec musel udělat takhle, ale co už eShrug.
-        # Co tímhle chci sdělit je to, že následující text pojednává o problému, který ze
-        # současného pohledu neexistuje.    S pozdravem, moje Já z budoucnosti (relativně k textu)
 
-        # Takže... Tohle bude, je a už i byl pain - strávil jsem na tomto X dnů a pořád jsem to
-        # nezprovoznil. V tuhle chvíli prohlašuji, že to nejde. Dle mého jsem zkusil vše - různě umístěný
-        # patch_stdout, různě umístěný ProgressBar(), rozdílé místa, odkud se volají různé thready. Jsou
-        # tu i další věci, co chci dělat tudíž tohle odkládám na někdy jindy.
-        # Problém je ten, že ProgressBar si nerozumí s prompt (obv, protože kdyby si rozumněli, tak není
-        # co řešit). Jde hlavně o 2 věci: 1. Když máme prompt aktivní, tak nelze psát do terminálu,
-        # 2. ProgressBar potřebuje přepisovat to co napsal (tzn. \r (i guess)). První problém má jasné
-        # řešení - patch_stdout. Jenže zde se stává z druhého bodu problém (který dosud nebyl, protože
-        # ProgressBar mohl v pohodě přepisovat to co napsal) - patch_stdout očividně "nepodporuje"
-        # přepisování (tzn. \r (opět jen můj tip)), pokud je zde aktivní prompt (když se nad tím zamyslíte,
-        # tak ono udělat takovou věc (tím myslím podporovat přepisování) je docela insane, když potřebujete
-        # NEpřepsat tu jednu řádku, která je od promptu - tím se nesnažím říct, že je to tak správně, jen
-        # říkám, že to až tak EZ není).
-        # Testy, které jsem zkoušel dopadli od katastrofických výsledků k ještě horším výsledkům. Zkoušel
-        # jsem jen s jednou instancí ProgressBarCounter (tzn. jen jedna řádka, která se potřebuje přepsat),
-        # ale stejně to dopadlo tak jak to dopadlo. V "lepších" případech se "jen" promíchal prompt
-        # s ProgressBarem. V horších případech nastali exceptiony v asyncio a promt_toolkit modulech.
-        # V nejhorším případě jsem nějak způsobil exceptiony v stdlib modulech, které se navíc lišily
-        # v jednotivých pokusech (bez změny v kódu)! Ano, přeci jen je to i theading, takže se chování
-        # programu může *teoreticky* lišit v jednotivých pokusech, ale twl - je to stdlib! To má být
-        # spolehlivý a ten, kdo to použije by neměl řešit nějaký takovýhle chyby. (Pozn.: Tyhle exceptiony
-        # byly "interní" - Tím myslím, že se stali hoooodně hluboko v knihovně a nikde k něčemu takovému není
-        # dokumentace (ani StackOverflow nepomohl)).
-        # Závěr? Nejde to. Well jde, pokud hodlám přepsat prompt_toolkit nebo si napsat vlastní prompt_toolkit.
-        # Reálně ono by asi stačilo upravit patch_stdout (interně v prompt_toolkit je to tuším StdoutProxy),
-        # jelikož ono to "drží" prompt pořád dole, takže by někde stačilo "jen" říct že "progress bar taky
-        # nech dole", ale to vážně dělat nechci. Je dost možný, že se na to vykašlu a otevřu prostě GitHub
-        # issue, ať to za mě implementuje někdo jiný eShrug.
-        # BTW asi by to šlo vyřešit i tak, že si prostě udlěmám prompt_tookit aplikaci (tzn. že promt_toolkitu
-        # nechám celý terminál, ať si s ním dělá co chce), ale tzn. že shell pak vlastně potřebuje být taky
-        # jako aplikace (chci nechat shell jako stand alone modul, ne jen něco, co mi dělá funkcionalitu pro
-        # BakalářiAPI) a IDK jestli pak nenastane stejný problém.
+        def task_ukoly(api: bakalariapi.BakalariAPI, task: RichTask):
+            length = len(api.get_homeworks(bakalariapi.GetMode.FRESH, fast_mode=True))
+            task.update(total=length, completed=length)
 
-        def task_ukoly(api: bakalariapi.BakalariAPI, progress_bar: ProgressBarCounter):
-            length = max(
-                len(api.get_homeworks(bakalariapi.GetMode.FRESH, fast_mode=True)), 1
-            )
-            progress_bar.total = length
-            # 'item_completed()' dělá to, že zvýší 'items_completed' o 1 a zároveň volá 'invalidate()' na 'progress_bar' instanci, takže uděláme +/- to samé
-            # (pozn. zde máme 'progress_bar' jako ProgressBarCounter, ale ProgressBarCounter má vlastní 'progress_bar')
-            progress_bar.items_completed = length
-            progress_bar.progress_bar.invalidate()
-            progress_bar.done = True
-
-        def task_komens(api: bakalariapi.BakalariAPI, progress_bar: ProgressBarCounter):
+        def task_komens(api: bakalariapi.BakalariAPI, task: RichTask):
             unresolved = api._parse(
                 bakalariapi.modules.komens.getter_komens_ids(
                     api, from_date=None if lasttime is None else lasttime - timedelta(5)
                 )
             ).get(bakalariapi.UnresolvedID)
-            if len(unresolved) == 0:
-                progress_bar.total = 1
-                progress_bar.item_completed()
-            else:
-                progress_bar.total = len(unresolved)
-                for unresolved_id in unresolved:
-                    api._resolve(unresolved_id)
-                    progress_bar.item_completed()
-            progress_bar.done = True
+            task.update(total=len(unresolved))
+            task.start()
+            for unresolved_id in unresolved:
+                api._resolve(unresolved_id)
+                task.update(advance=1)
 
-        def task_znamky(api: bakalariapi.BakalariAPI, progress_bar: ProgressBarCounter):
-            length = max(len(api.get_all_grades()), 1)
-            progress_bar.total = length
-            progress_bar.items_completed = length
-            progress_bar.progress_bar.invalidate()  # viz task_ukoly
-            progress_bar.done = True
+        def task_znamky(api: bakalariapi.BakalariAPI, task: RichTask):
+            length = len(api.get_all_grades())
+            task.update(total=length, completed=length)
 
-        def task_schuzky(
-            api: bakalariapi.BakalariAPI, progress_bar: ProgressBarCounter
-        ):
+        def task_schuzky(api: bakalariapi.BakalariAPI, task: RichTask):
             unresolved = api._parse(
                 bakalariapi.modules.meetings.getter_future_meetings_ids(api)
             ).get(bakalariapi.UnresolvedID)
-            if len(unresolved) == 0:
-                progress_bar.total = 1
-                progress_bar.item_completed()
-            else:
-                progress_bar.total = len(unresolved)
-                for unresolved_id in unresolved:
-                    api._resolve(unresolved_id)
-                    progress_bar.item_completed()
-            progress_bar.done = True
+            task.update(total=len(unresolved))
+            task.start()
+            for unresolved_id in unresolved:
+                api._resolve(unresolved_id)
+                task.update(advance=1)
 
+        @dataclass
         class Task:
-            def __init__(
-                self,
-                name: str,
-                func: Callable[[bakalariapi.BakalariAPI, ProgressBarCounter], None],
-            ) -> None:
-                self.name: str = name
-                self.func: Callable[
-                    [bakalariapi.BakalariAPI, ProgressBarCounter], None
-                ] = func
+            description: str
+            function: Callable[[bakalariapi.BakalariAPI, RichTask], None]
+            start: bool = True
 
-            def run(self, progress_bar: ProgressBarCounter):
-                self.func(api, progress_bar)
-
-        tasks = [
-            Task("Získání Komens zpráv", task_komens),
-            Task("Získání schůzek", task_schuzky),
+        tasks: list[Task] = [
+            Task("Získání Komens zpráv", task_komens, False),
+            Task("Získání schůzek", task_schuzky, False),
             Task("Získání úkolů", task_ukoly),
             Task("Získání známek", task_znamky),
         ]
 
         def autorun():
-            with ProgressBar("Úlohy po spuštění:") as progress_bar:
-
-                def task_runner(task: Task):
-                    task.run(progress_bar(label=task.name))
-
+            with Progress(
+                "[progress.description]{task.description}",
+                BarColumn(),
+                "[progress.percentage]{task.percentage:>3.0f}%",
+                "{task.completed}/{task.total}",
+                TimeRemainingColumn(),
+            ) as progress:
                 threads: list[threading.Thread] = []
                 for task in tasks:
-                    thread = threading.Thread(target=task_runner, args=(task,))
-                    threads.append(thread)
+                    thread = threading.Thread(
+                        target=task.function,
+                        args=(
+                            api,
+                            RichTask(
+                                progress,
+                                progress.add_task(task.description, start=task.start),
+                            ),
+                        ),
+                    )
                     thread.start()
+                    threads.append(thread)
                 for thread in threads:
                     thread.join()
 
         print()
-        # threading.Thread(target=autorun).start()
         autorun()
 
     if "exit" not in args.commands and (not args.no_import or args.auto_run):
