@@ -26,7 +26,7 @@ LOGGER = logging.getLogger("bakalariapi")
 LOGGER.addHandler(logging.NullHandler())
 
 __all__ = ["Endpoint", "BakalariAPI", "LAST_SUPPORTED_VERSION", "GetMode"]
-LAST_SUPPORTED_VERSION = "1.44"
+LAST_SUPPORTED_VERSION = "1.45"
 
 
 class Endpoint:

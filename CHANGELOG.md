@@ -14,8 +14,10 @@ Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 - Změněna struktura komplexní serializace - Nyní je v `"data"` sekci komplexní serializace pouze list, root se nachází na poslední pozici v tomto listu
 - Atribut `serialization.Upgradeable._atributes` změněn na `serialization.Upgradeable.deserialization_keys`
 - Serializace se nyní chová k `list` a `dict` instancím stejně jako k jiným objektům, tzn. vytváření referencí na tyto instance
-- Lepší porovnávání podporované verze Bakalářů a hranice zvýšena na "1.44"
+- Lepší porovnávání podporované verze Bakalářů a hranice zvýšena na "1.45"
 - `bakalarishell` nyní všechny soubory vytváří s utf-8 kódováním; Tohle je drastická změna a bohužel může nastat situace, kdy nastane `UnicodeDecodeError` při importu starých dat. V tom případě je potřeba manuálně změnit kódování starých souborů na utf-8.
+- `bakalarishell` nyní používá progress bary z `rich` modulu
+- Různé další vylepšení `bakalarishell`u
 
 ### Fixed
 - Opravena serializace `list` instancí

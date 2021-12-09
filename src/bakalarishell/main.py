@@ -14,17 +14,16 @@ import warnings
 import webbrowser
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import IO, TYPE_CHECKING, Any, Callable, cast
+from typing import IO, TYPE_CHECKING, Any, Callable
 
 import bakalariapi
 import platformdirs
 import requests
 import rich
-from bakalariapi.utils import parseHTML
+from bakalariapi.utils import cs_timedelta, parseHTML
 from prompt_toolkit.input import create_input
 from prompt_toolkit.key_binding import KeyPress
 from prompt_toolkit.keys import Keys
-from prompt_toolkit.shortcuts.progress_bar import ProgressBar, ProgressBarCounter
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.progress import BarColumn, Progress, TaskID, TimeRemainingColumn
@@ -202,11 +201,9 @@ def show(obj: bakalariapi.objects.BakalariObject, title: str | None = None):
         print_keys([("P - Potrvrdí přečtení zprávy", "" if obj.confirmed else "green")])
 
         def komens_key_handler(key_press: KeyPress, done: Callable):
-            # Pyright nebere v potaz IF z outer scopu (https://github.com/microsoft/pyright/issues/1731)
-            o = cast(bakalariapi.Komens, obj)
             if key_press.key == "p":
                 print("Potvrzuji zprávu...")
-                o.confirm(api)
+                obj.confirm(api)
                 print("Zpráva potvrzena")
 
         asyncio.run(keyhandler(komens_key_handler))
@@ -237,13 +234,12 @@ def show(obj: bakalariapi.objects.BakalariObject, title: str | None = None):
         )
 
         def meeting_key_handler(key_press: KeyPress, done: Callable):
-            o = cast(bakalariapi.Meeting, obj)
             key = key_press.key.lower()
             if key == "o":
-                webbrowser.open(o.join_url)
+                webbrowser.open(obj.join_url)
             elif key == "z":
                 c = Console()
-                c.print(Syntax(str(parseHTML(o.content).prettify()), "html"))
+                c.print(Syntax(str(parseHTML(obj.content).prettify()), "html"))
 
         asyncio.run(keyhandler(meeting_key_handler))
     # elif isinstance(obj, bakalariapi.Student):
@@ -262,17 +258,16 @@ def show(obj: bakalariapi.objects.BakalariObject, title: str | None = None):
         )
 
         def homework_key_handler(key_press: KeyPress, done: Callable):
-            o = cast(bakalariapi.Homework, obj)
             key = key_press.key.lower()
             if key == "h":
-                o.mark_as_done(api, True)
+                obj.mark_as_done(api, True)
                 print("Úkol označen jako hotový")
             elif key == "n":
-                o.mark_as_done(api, False)
+                obj.mark_as_done(api, False)
                 print("Úkol označen jako nehotový")
             elif key == "z":
                 c = Console()
-                c.print(Syntax(str(parseHTML(o.content).prettify()), "html"))
+                c.print(Syntax(str(parseHTML(obj.content).prettify()), "html"))
 
         asyncio.run(keyhandler(homework_key_handler))
 
@@ -454,11 +449,11 @@ def Init():
 
 def ServerInfo():
     rich_print(
-        f"Typ uživatele: [cyan]{'Není k dispozici' if api.user_info.type == '' else api.user_info.type}[/cyan]\n"
-        f"Uživatelký hash: [cyan]{'Není k dispozici' if api.user_info.hash == '' else api.user_info.hash}[/cyan]\n"
-        f"Verze Bakalářů: [cyan]{'Není k dispozici' if api.server_info.version is None else api.server_info.version}[/cyan]\n"
-        f"Datum verze Bakalářů: [cyan]{'Není k dispozici' if api.server_info.version_date is None else api.server_info.version_date.strftime('%d. %m. %Y')}[/cyan]\n"
-        f"Evidenční číslo verze Bakalářů: [cyan]{'Není k dispozici' if api.server_info.evid_number is None else api.server_info.evid_number}[/cyan]",
+        f"Typ uživatele: {'[bright_black]Není k dispozici[/bright_black]' if api.user_info.type == '' else f'[cyan]{api.user_info.type}[/cyan]'}\n"
+        f"Uživatelký hash: {'[bright_black]Není k dispozici[/bright_black]' if api.user_info.hash == '' else f'[cyan]{api.user_info.hash}[/cyan]'}\n"
+        f"Verze Bakalářů: {'[bright_black]Není k dispozici[/bright_black]' if api.server_info.version is None else f'[cyan]{api.server_info.version}[/cyan]'}\n"
+        f"Datum verze Bakalářů: {'[bright_black]Není k dispozici[/bright_black]' if api.server_info.version_date is None else '[cyan]'+api.server_info.version_date.strftime('%d. %m. %Y')+'[/cyan] [bright_black]('+cs_timedelta((datetime.now() - api.server_info.version_date), 'd')+' stará verze)[/bright_black]'}\n"
+        f"Evidenční číslo verze Bakalářů: {'[bright_black]Není k dispozici[/bright_black]' if api.server_info.evid_number is None else f'[cyan]{api.server_info.evid_number}[/cyan]'}\n",
         highlight=False,
     )
     if not (api.server_info.version is None) and not api.is_version_supported():
@@ -475,16 +470,18 @@ def Command_Komens(limit: int | None = None, force_fresh: bool = False):
             partial_init_notice()
             return []
         output: list[bakalariapi.Komens] = []
-        with ProgressBar("Získávám zprávy...") as progress_bar:
-            counter: ProgressBarCounter = progress_bar(remove_when_done=True)
+        with Progress() as progress:
+            task = RichTask(
+                progress, progress.add_task("Získávání zpráv", start=False, total=0)
+            )
             unresolved = api._parse(
                 bakalariapi.modules.komens.getter_komens_ids(api)
             ).get(bakalariapi.UnresolvedID)[:limit]
-            counter.total = len(unresolved)
-            progress_bar.invalidate()
+            task.update(total=len(unresolved))
             for unresolved_id in unresolved:
                 output.append(api._resolve(unresolved_id).get(bakalariapi.Komens)[0])
-                counter.item_completed()
+                task.update(advance=1)
+
         return output
 
     if force_fresh:
@@ -497,7 +494,7 @@ def Command_Komens(limit: int | None = None, force_fresh: bool = False):
 
     length = len(zpravy)
     if length == 0:
-        print("Nebyli nalezeny žádné aktualní schůzky")
+        print("Nebyly nalezeny žádné aktualní schůzky")
         return
     cls()
     count = 1
@@ -544,16 +541,17 @@ def Command_Schuzky(force_fresh: bool = False):
             partial_init_notice()
             return []
         output = []
-        with ProgressBar("Získávám schůzky...") as progress_bar:
-            counter = progress_bar(remove_when_done=True)
+        with Progress() as progress:
+            task = RichTask(
+                progress, progress.add_task("Získávání schůzek", start=False, total=0)
+            )
             unresolved = api._parse(
                 bakalariapi.modules.meetings.getter_future_meetings_ids(api)
             ).get(bakalariapi.UnresolvedID)
-            counter.total = len(unresolved)
-            progress_bar.invalidate()
+            task.update(total=len(unresolved))
             for unresolved_id in unresolved:
                 output.append(api._resolve(unresolved_id).get(bakalariapi.Meeting)[0])
-                counter.item_completed()
+                task.update(advance=1)
         return output
 
     if force_fresh:
@@ -566,7 +564,7 @@ def Command_Schuzky(force_fresh: bool = False):
 
     length = len(schuzky)
     if length == 0:
-        print("Nebyli nalezeny žádné aktualní schůzky")
+        print("Nebyly nalezeny žádné aktualní schůzky")
         return
     cls()
     count = 1
@@ -650,7 +648,7 @@ def Command_Ukoly(fast: bool = False, force_fresh: bool = False):
             nehotove += 1
 
     if hotove + nehotove == 0:
-        print("Nebyli nalezeny žádné aktualní úkoly")
+        print("Nebyly nalezeny žádné aktualní úkoly")
         return
     print(f"Úkoly načteny (hotové {hotove}, nehotové {nehotove})")
     zobraz_hotove = fast or dialog_ano_ne("Chte zobrazit již hotové úkoly?")
@@ -846,25 +844,29 @@ def Test2():
             api, datetime(1, 1, 1), datetime(9999, 12, 31, 23, 59, 59)
         )
     ).get(bakalariapi.UnresolvedID)
-    print("IDčka online schůzek získany")
+    la = len(IDs)
+    print(f"IDčka online schůzek získany ({la})")
     print()
     error: list[bakalariapi.UnresolvedID[bakalariapi.Meeting]] = []
     try:
-        with ProgressBar() as pb:
-            counter = pb(IDs)
-            for ID in counter:  # type: ignore
-                counter.label = f"Schůzka {ID.ID}"
+        with Progress() as progress:
+            task = RichTask(progress, progress.add_task("Získávání schůzek", total=la))
+            for ID in IDs:
+                task.update(description=f"Schůzka {ID.ID}")
                 try:
                     api._resolve(ID)
                 except bakalariapi.exceptions.BakalariQuerrySuccessError as e:
-                    print(f"Online schůzku {ID.ID} se nepodařilo načíst ({e})")
+                    progress.log(f"Online schůzku {ID.ID} se nepodařilo načíst")
                     error.append(ID)
+                finally:
+                    task.update(advance=1)
     except KeyboardInterrupt:
         pass
     finally:
-        la = len(IDs)
         le = len(error)
-        print(f"Úspěšné pokusy: {la - le}; Neúspěšné pokusy: {le}")
+        print(
+            f"Úspěšné pokusy: {la - le}; Neúspěšné pokusy: {le}; Chybovost: {le/la*100:.2f}%"
+        )
 
 
 def Test3():
@@ -1182,7 +1184,9 @@ def main():
                             api,
                             RichTask(
                                 progress,
-                                progress.add_task(task.description, start=task.start),
+                                progress.add_task(
+                                    task.description, start=task.start, total=0
+                                ),
                             ),
                         ),
                     )
