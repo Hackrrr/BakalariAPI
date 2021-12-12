@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import getpass
+import inspect
 import json
 import logging
 import logging.config
@@ -14,7 +15,7 @@ import warnings
 import webbrowser
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import IO, TYPE_CHECKING, Any, Callable
+from typing import IO, TYPE_CHECKING, Any, Callable, cast
 
 import bakalariapi
 import platformdirs
@@ -29,6 +30,7 @@ from rich.logging import RichHandler
 from rich.progress import BarColumn, Progress, TaskID, TimeRemainingColumn
 from rich.syntax import Syntax
 from rich.traceback import install as tb_install
+from urllib3.exceptions import InsecureRequestWarning
 
 # Takový hack na to, aby `bakalarishell` šel spustit také přímo ze zdrojové složky
 # Pokud se `bakalarishell` spustí jako modul (= přes `import`), tak vše proběhne v pořádku
@@ -359,17 +361,62 @@ def save_config():
         json.dump(args.__dict__, f, indent=4)
 
 
+def disable_ssl():
+    def patch(f: Callable):
+        def patched(*args, **kwargs):
+            # `cast()` protože jsem zatím nepřišel na způsob, jak dostat hint při patchování metod (pomocí `ParamSpec`u)
+            session = cast(bakalariapi.sessions.RequestsSession, args[0])
+            bound = inspect.signature(f).bind(*args, **kwargs)
+            bound.apply_defaults()
+            login = bound.arguments["login"]
+            bound.arguments["login"] = False
+            x = f(*bound.args, **bound.kwargs)
+            session.session.verify = False
+            if login:
+                session.login()
+            return x
+
+        return patched
+
+    bakalariapi.sessions.RequestsSession.__init__ = patch(
+        bakalariapi.sessions.RequestsSession.__init__
+    )
+    # Když nastavíme `verify` na `False` (v `requests` modulu), `urllib3` si začne stěžovat
+    warnings.filterwarnings("ignore", category=InsecureRequestWarning)
+
+
 ##################################################
 #####             PŘÍKAZO-FUNKCE             #####
 ##################################################
 
 
-def Init():
+def Init() -> bool:
     def partial_init_mode():
         rich_print(
             "\nInicilizace neproběhla úspěšně a shell poběží v omezeném módu.\nPro přepnutí do plného módu zkuste opětovat inicializaci pomocí příkazu 'init'.",
             color="yellow",
         )
+
+    def ask_import() -> bool:
+        try:
+            if args.no_import:
+                if dialog_ano_ne(
+                    "Server není dostupný; Chce importovat uložená data?",
+                    True,
+                    "yellow",
+                ):
+                    Command_Import()
+                else:
+                    partial_init_mode()
+            else:
+                rich_print(
+                    "Server není dostupný; Uložená data byla již importována, je tedy možné pracovat se starými daty",
+                    color="yellow",
+                )
+                partial_init_mode()
+        except KeyboardInterrupt:
+            partial_init_mode()
+        return False
 
     if args.url is None:
         try:
@@ -378,7 +425,7 @@ def Init():
         except KeyboardInterrupt:
             rich_print("\nNebyla zadána adresa serveru", color="red")
             partial_init_mode()
-            return
+            return False
     if args.username is None:
         try:
             args.username = input("Přihlašovací jméno: ")
@@ -386,7 +433,7 @@ def Init():
         except KeyboardInterrupt:
             rich_print("\nNebylo zadáno přihlašovací jméno", color="red")
             partial_init_mode()
-            return
+            return False
     if args.password is None:
         try:
             args.password = getpass.getpass("Heslo: ")
@@ -406,30 +453,32 @@ def Init():
             if not api.is_login_valid():
                 rich_print("Přihlašovací údaje jsou neplatné", color="red")
                 partial_init_mode()
-                return
-        except requests.exceptions.RequestException:
+                return False
+        except requests.exceptions.SSLError:
+            # rich.get_console().print_exception()
             try:
-                if args.no_import:
-                    if dialog_ano_ne(
-                        "Server Bakalářů neběží; Chce se pokusit naimportovat data z předchozího souboru?",
-                        True,
-                        "yellow",
-                    ):
-                        Command_Import()
-                    else:
-                        partial_init_mode()
-                        return
+                if dialog_ano_ne(
+                    "Nepodařilo se navázat zabezpečené připojení k serveru. Chcete pokračovat s nezabezpečeným připojením?",
+                    False,
+                    "yellow",
+                ):
+                    disable_ssl()
+                    api.session_manager.kill_all(False)
+                    print(
+                        "Deaktivovalo se zabezpečené připojení, inicializace nyní proběhne znovu..."
+                    )
+                    return Init()
                 else:
-                    rich_print("Server Bakalářů neběží", color="yellow")
-                    partial_init_mode()
-                    return
+                    return ask_import()
             except KeyboardInterrupt:
                 partial_init_mode()
-                return
+                return False
+        except requests.exceptions.RequestException:
+            return ask_import()
     except KeyboardInterrupt:
         rich_print("Inicializace byla předčasně ukončena", color="yellow")
         partial_init_mode()
-        return
+        return False
     rich_print("Server běží a přihlašovací údaje jsou správné", color="green")
     print("Nastavuji...")
     try:
@@ -442,9 +491,10 @@ def Init():
             "Nebyly získány informace o stavu serveru, ale žádné funkce by tímto neměli být ovlivněny",
             color="yellow",
         )
-        return
+        return True
     print("Nastaveno:")
     ServerInfo()
+    return True
 
 
 def ServerInfo():
@@ -1090,8 +1140,16 @@ def main():
 
     api = bakalariapi.BakalariAPI(args.url, args.username, args.password, selenium)
 
+    successful_init = False
     if not args.no_init:
-        Init()
+        successful_init = Init()
+
+    if not args.no_import:
+        try:
+            with get_io_file("main", False) as f:
+                api.looting.import_data(json.loads(f.read()))
+        except FileNotFoundError:
+            pass
 
     if args.test is not None:
         RunTest(args.test)
@@ -1116,87 +1174,89 @@ def main():
     except FileNotFoundError:
         pass
 
-    if not args.no_import:
-        try:
-            with get_io_file("main", False) as f:
-                api.looting.import_data(json.loads(f.read()))
-        except FileNotFoundError:
-            pass
-
     if args.auto_run:
+        if successful_init:
 
-        def task_ukoly(api: bakalariapi.BakalariAPI, task: RichTask):
-            length = len(api.get_homeworks(bakalariapi.GetMode.FRESH, fast_mode=True))
-            task.update(total=length, completed=length)
-
-        def task_komens(api: bakalariapi.BakalariAPI, task: RichTask):
-            unresolved = api._parse(
-                bakalariapi.modules.komens.getter_komens_ids(
-                    api, from_date=None if lasttime is None else lasttime - timedelta(5)
+            def task_ukoly(api: bakalariapi.BakalariAPI, task: RichTask):
+                length = len(
+                    api.get_homeworks(bakalariapi.GetMode.FRESH, fast_mode=True)
                 )
-            ).get(bakalariapi.UnresolvedID)
-            task.update(total=len(unresolved))
-            task.start()
-            for unresolved_id in unresolved:
-                api._resolve(unresolved_id)
-                task.update(advance=1)
+                task.update(total=length, completed=length)
 
-        def task_znamky(api: bakalariapi.BakalariAPI, task: RichTask):
-            length = len(api.get_all_grades())
-            task.update(total=length, completed=length)
+            def task_komens(api: bakalariapi.BakalariAPI, task: RichTask):
+                unresolved = api._parse(
+                    bakalariapi.modules.komens.getter_komens_ids(
+                        api,
+                        from_date=None if lasttime is None else lasttime - timedelta(5),
+                    )
+                ).get(bakalariapi.UnresolvedID)
+                task.update(total=len(unresolved))
+                task.start()
+                for unresolved_id in unresolved:
+                    api._resolve(unresolved_id)
+                    task.update(advance=1)
 
-        def task_schuzky(api: bakalariapi.BakalariAPI, task: RichTask):
-            unresolved = api._parse(
-                bakalariapi.modules.meetings.getter_future_meetings_ids(api)
-            ).get(bakalariapi.UnresolvedID)
-            task.update(total=len(unresolved))
-            task.start()
-            for unresolved_id in unresolved:
-                api._resolve(unresolved_id)
-                task.update(advance=1)
+            def task_znamky(api: bakalariapi.BakalariAPI, task: RichTask):
+                length = len(api.get_all_grades())
+                task.update(total=length, completed=length)
 
-        @dataclass
-        class Task:
-            description: str
-            function: Callable[[bakalariapi.BakalariAPI, RichTask], None]
-            start: bool = True
+            def task_schuzky(api: bakalariapi.BakalariAPI, task: RichTask):
+                unresolved = api._parse(
+                    bakalariapi.modules.meetings.getter_future_meetings_ids(api)
+                ).get(bakalariapi.UnresolvedID)
+                task.update(total=len(unresolved))
+                task.start()
+                for unresolved_id in unresolved:
+                    api._resolve(unresolved_id)
+                    task.update(advance=1)
 
-        tasks: list[Task] = [
-            Task("Získání Komens zpráv", task_komens, False),
-            Task("Získání schůzek", task_schuzky, False),
-            Task("Získání úkolů", task_ukoly),
-            Task("Získání známek", task_znamky),
-        ]
+            @dataclass
+            class Task:
+                description: str
+                function: Callable[[bakalariapi.BakalariAPI, RichTask], None]
+                start: bool = True
 
-        def autorun():
-            with Progress(
-                "[progress.description]{task.description}",
-                BarColumn(),
-                "[progress.percentage]{task.percentage:>3.0f}%",
-                "{task.completed}/{task.total}",
-                TimeRemainingColumn(),
-            ) as progress:
-                threads: list[threading.Thread] = []
-                for task in tasks:
-                    thread = threading.Thread(
-                        target=task.function,
-                        args=(
-                            api,
-                            RichTask(
-                                progress,
-                                progress.add_task(
-                                    task.description, start=task.start, total=0
+            tasks: list[Task] = [
+                Task("Získání Komens zpráv", task_komens, False),
+                Task("Získání schůzek", task_schuzky, False),
+                Task("Získání úkolů", task_ukoly),
+                Task("Získání známek", task_znamky),
+            ]
+
+            def autorun():
+                with Progress(
+                    "[progress.description]{task.description}",
+                    BarColumn(),
+                    "[progress.percentage]{task.percentage:>3.0f}%",
+                    "{task.completed}/{task.total}",
+                    TimeRemainingColumn(),
+                ) as progress:
+                    threads: list[threading.Thread] = []
+                    for task in tasks:
+                        thread = threading.Thread(
+                            target=task.function,
+                            args=(
+                                api,
+                                RichTask(
+                                    progress,
+                                    progress.add_task(
+                                        task.description, start=task.start, total=0
+                                    ),
                                 ),
                             ),
-                        ),
-                    )
-                    thread.start()
-                    threads.append(thread)
-                for thread in threads:
-                    thread.join()
+                        )
+                        thread.start()
+                        threads.append(thread)
+                    for thread in threads:
+                        thread.join()
 
-        print()
-        autorun()
+            print()
+            autorun()
+        else:
+            rich_print(
+                "Autorun nebyl spuštěn kvůli nepodařené/nekompletní inicializaci",
+                color="yellow",
+            )
 
     if "exit" not in args.commands and (not args.no_import or args.auto_run):
         print()
@@ -1277,10 +1337,16 @@ def main():
             f.write(datetime.now().isoformat())
 
     if len(args.commands) != 0:
-        print("Vykonávám zadané příkazy...")
-        for command in args.commands:
-            print(command)
-            shell_instance.proc_string(command)
+        if successful_init:
+            print("Vykonávám zadané příkazy...")
+            for command in args.commands:
+                print(command)
+                shell_instance.proc_string(command)
+        else:
+            rich_print(
+                "Zadané příkazy nebyly spuštěny kvůli nepodařené/nekompletní inicializaci",
+                color="yellow",
+            )
 
     try:
         shell_instance.start_loop()
