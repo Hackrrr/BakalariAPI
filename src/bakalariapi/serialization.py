@@ -18,10 +18,10 @@ from datetime import datetime
 from typing import (
     Any,
     Callable,
-    Iterable,
     Literal,
     Mapping,
     Protocol,
+    Sequence,
     TypedDict,
     TypeVar,
     Union,
@@ -52,12 +52,14 @@ SerializablePrimitive = Union[
 SerializableValue = Union[
     SerializablePrimitive,
     Mapping[str, "SerializableValue"],  # type: ignore # Mypy nepodporuje rekurzi  https://github.com/python/mypy/issues/731
-    Iterable["SerializableValue"],  # type: ignore # Mypy nepodporuje rekurzi  https://github.com/python/mypy/issues/731
+    Sequence["SerializableValue"],  # type: ignore # Mypy nepodporuje rekurzi  https://github.com/python/mypy/issues/731
+    "Serializable",
+    "SerializedData",  # Kupodivu to funguje, ale čekám, že se to jednou zase rozbije
 ]
 RawSerializableValue = Union[
     SerializableValue,
     Mapping[str, Any],
-    Iterable[Any],
+    Sequence[Any],
 ]
 TSerializablePrimitive = TypeVar("TSerializablePrimitive", bound=SerializablePrimitive)
 TSerializableValue = TypeVar("TSerializableValue", bound=SerializableValue)
@@ -112,10 +114,10 @@ class Upgradeable(Protocol, metaclass=_CustomChecks):
     @classmethod
     def upgrade(
         cls,
-        data: dict[str, Any],
+        data: Mapping[str, Any],
         missing: set[str],
         redundant: set[str],
-    ) -> dict[str, Any]:
+    ) -> Mapping[str, Any]:
         raise NotImplementedError()
 
     @classmethod
@@ -265,7 +267,7 @@ def deserialize(
                 data["data"] = deserialize(data["data"], recursive)
             type_ = resolve_string(data["__type__"])
             # Ověříme, zda je typ Upgradeable, případně upgradujeme.
-            if isinstance(data["data"], dict) and issubclass(type_, Upgradeable):
+            if isinstance(data["data"], Mapping) and issubclass(type_, Upgradeable):
                 actual = set(data["data"].keys())
                 missing = type_.deserialization_keys - actual
                 redundant = actual - type_.deserialization_keys
@@ -297,10 +299,13 @@ def deserialize(
                 for key, value in output.items():
                     output[key] = deserialize(value, recursive)
             return output
-    elif isinstance(data, list):
+    elif isinstance(data, Sequence):
         output = [None] * len(data)
         for index, value in enumerate(data):
-            output[index] = deserialize(value, recursive) if recursive else value
+            output[index] = deserialize(value, recursive) if recursive else value  # type: ignore
+            # Ignore, protože `output` si pyright odvodil jakožto `list[None]`... Jo...
+            # Proč to není teda anotované třeba jako `list[Any]`? Protože tu je `output`,
+            # i v jiné větvy (viz 10 řádků výš) a pyright si pak stěžuje, že dáváme `dict` do `list`u
         return output
     raise ValueError
 
@@ -417,11 +422,16 @@ def complex_serialize(data: object, *, inlining: bool = True) -> SerializedData:
             # Čistě teoreticky by tady else větev nemusela být, ale je tu jakožto sanity check.
             raise RuntimeError("serialize() returned something else than list or dict")
 
+        # Protoře RawSerializedData jsme kompltně serializovali
+        # BTW tohle nelze dělat ve větvy s RawSerializedData, protože nejsme schopni
+        # odstranit/nahradit typ z již utvořené anotace
+        serialized = cast(Union[SerializableValue, SerializedData], serialized)
+
         # Když je "`nested`", nechceme referenci (viz výš) nýbrž samotný serializovaný objekt
         if not nested:
-            r["data"] = len(obj_list)  # type: ignore
+            r["data"] = len(obj_list)  # type: ignore # `r` possibly unbound
             obj_list.append(serialized)
-            return r  # type: ignore
+            return r  # type: ignore # `r` possibly unbound
         else:
             return serialized
 
@@ -466,17 +476,16 @@ def complex_serialize(data: object, *, inlining: bool = True) -> SerializedData:
 def complex_deserialize(data: SerializedData) -> Any:
     # Kompatibilita pro data před v4.0
     legacy: bool = False
+    original_obj_list: list[SerializedData]
     if (
         isinstance(data["data"], dict)
         and "objects" in data["data"]
         and "structure" in data["data"]
     ):
         legacy = True
-        original_obj_list: list[SerializedData] = data["data"]["objects"][::-1] + [
-            data["data"]["structure"]
-        ]
+        original_obj_list = data["data"]["objects"][::-1] + [data["data"]["structure"]]  # type: ignore
     else:
-        original_obj_list: list[SerializedData] = data["data"]  # type: ignore
+        original_obj_list = data["data"]  # type: ignore
 
     real_obj_list: list[object] = [None] * len(original_obj_list)
 

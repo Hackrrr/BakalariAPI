@@ -2,7 +2,7 @@
 `BakalářiAPI` má vlastní poměrně komplexní systém serializace. Tento systém podporuje serializaci vlastních objektů, rekurze a referencí na objekty. Všechny funkce a třídy sloužící k serializaci jsou v modulu `serialization`.
 
 # Co dělá serializace
-Samotný systém nedokáže převést data do zapsatelné podoby, nýbrž převádí data do podoby, kterou dokáží jiné serializery zpracovat. Při serializaci se data převedou tak, aby nakonec data byla typu `SerializableValue` (= `Union` typů, které považujeme za serializovatelné). `SerializableValue` je buď `Mapping[str, SerializableValue]` (= `dict`), `Iterable[SerializableValue]` (= `list`) anebo `SerializablePrimitive` (= `Union[bool, float, int, None, str]`= typy, které by měli být serializovatelné každým serializerem).
+Samotný systém nedokáže převést data do zapsatelné podoby, nýbrž převádí data do podoby, kterou dokáží jiné serializery zpracovat. Při serializaci se data převedou tak, aby nakonec data byla typu `SerializableValue` (= `Union` typů, které považujeme za serializovatelné). `SerializableValue` je buď `Mapping[str, SerializableValue]` (= `dict`), `Sequence[SerializableValue]` (= `list`) anebo `SerializablePrimitive` (= `Union[bool, float, int, None, str]`= typy, které by měli být serializovatelné každým serializerem).
 
 Tzn., pokud chceme uchovat data ve formátu JSON:
 ```py
