@@ -7,7 +7,7 @@
 |-----------------------------------|:--------------------------:|
 | Verze Bakalářů                    | 1.36.1214.1                |
 | Datum verze Bakalářů              | 14. 12. 2020               |
-| Datum poslední změny dokumentu    | 20. 12. 2020               |
+| Datum poslední změny dokumentu    | 24. 12. 2021               |
 | Potřeba Selenia?                  | Ne                         |
 
 # Přehled
@@ -25,7 +25,6 @@ Vždy se vrací HTML.
 ## Extrakce dat - HTML => JSON
 Za tu dobu, co toto vyvíjím, tak se struktura několikrát změnila, a proto jsem postup od původního způsobu, který postupoval krok po kroku (resp. element po elementu), změnil tak, aby byl co nejjednodušší/nejuniverzálnější: Chceme najít všechny elementy (zatím to jsou pouze `<div>` tagy), které mají `data-clasif` atribut. V tomto atributu je JSON ve kterém jsou data o známce.
 
-
 JSON vypadá takto:
 ```JSON
 {
@@ -34,7 +33,7 @@ JSON vypadá takto:
    "ShowType":false,
    "ShowWeight":false,
    "bodymax":0,
-   "caption":"Test kolik z malé násobilky",
+   "caption":"Test z malé násobilky",
    "id":"*25L4KBF0{",
    "IsNew":false,
    "maxvaha":1,
@@ -69,7 +68,7 @@ Popis klíčů:
 - `typ` - Typ známky v "krátké podobě", viz tabulka dál
 - `udel_datum` - Datum (něčeho), většinou stejný jako `strdatum`, ale mohou se lišit (někdy je větší `udel_datum`, někdy `strdatum`)
 - `vaha` - Váha známky, kde `1` je (asi) nejnižší
-- `MarkText` - Hodnota známky; Může obsahovat `+` nebo `-`, poznamenáno, kdyby někdo chtěl tuto hodnotu zkoušet parsovat ze stringu na číslo
+- `MarkText` - Hodnota známky; Může obsahovat `+` nebo `-`, poznamenáno pro případ, kdyby někdo chtěl tuto hodnotu zkoušet parsovat ze stringu na číslo
 
 ### Typ, označení
 Vypozorována závislost mezi hodnotami klíčů `typ` a `oznaceni`. Je možné, že mohou existovat specifické typy a označení v rámci jedné školy/jedné instance Bakalářů.
@@ -80,5 +79,29 @@ Vypozorována závislost mezi hodnotami klíčů `typ` a `oznaceni`. Je možné,
 | D      | Domácí úkol              |
 | J      | Jiné                     |
 
+## Extrakce dat - HTML => Předměty, čtvrtletní známka
+Z této stránky také lze zjistit seznam předmětů. V HTML chceme najít třídu `.predmet-radek`. `id` tohoto elementu je ID předmětu. K názvu předmětu se dostaneme přes `.predmet-radek -> .leva -> 1. div -> h3`. Čtvrtletní známka je text v divu, který lze najít skrz `.predmet-radek -> .leva -> .halvni -> div`. Struktura HTML vypadá přibližně takto:
+```html
+<div id="*ID_PŘEDMĚTU*" class="predmet-radek">
+   <div class="leva">
+      <div class="obal _subject_detail link">
+         <h3 title="Český jazyk a literatura">Český jazyk a literatura</h3>
+         <div class="info-text" data-id="*ID_PŘEDMĚTU*"> ... </div>
+         <div class="item-down-cover"></div>
+      </div>
+      <div class="hlavni">
+         <div title="Čtvrtletní (prozatímní výsledná známka)">1-</div>
+      </div>
+      ...
+   </div>
+   <div class="bx-wrapper" style="max-width: 112px; margin: 0px auto;">
+      <!-- Známky -->
+      ...
+   </div>
+</div>
+```
+
+
+
 # Výzkum
-Při hledání způsobu, jak parsovat známky byla v HTML, při manuálním prohledáváním zdroje stránky, nalezena JSON data (= data v atributu `data-clasif`). Tyto data pak byla zanalyzována a byl odvozen význam jednotlivých klíčů. Poznatky o filtrování byly získány manuální zkoušením a pozorováním requestů. Tabulka typ-označení byla nejdříve vypozorována, následně ověřena při možnosti pohledu na kontextovou nabídku z pohledu učitele.
+Při hledání způsobu, jak parsovat známky byla v HTML, při manuálním prohledáváním zdroje stránky, nalezena JSON data (= data v atributu `data-clasif`). Tyto data pak byla zanalyzována a byl odvozen význam jednotlivých klíčů. Poznatky o filtrování byly získány manuální zkoušením a pozorováním requestů. Tabulka typ-označení byla nejdříve vypozorována, následně ověřena při možnosti pohledu na kontextovou nabídku z pohledu učitele. ID předmětů bylo nalezeno analýzou HTML a jako důkaz o tom, že je to ID předmětu, slouží ID hodiny (viz [endpoint `rozvrh`](rozvrh.md))

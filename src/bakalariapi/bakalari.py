@@ -39,6 +39,7 @@ class Endpoint:
     KOMENS_GET = "/next/komens.aspx/GetMessageData"
     KOMENS_CONFIRM = "/next/komens.aspx/SetMessageConfirmed"
     FILE = "/next/getFile.aspx"
+    ROZVRH = "/next/rozvrh.aspx"
     GRADES = "/next/prubzna.aspx"
     SESSION_INFO = "/sessioninfo"
     SESSION_EXTEND = "/sessionextend"

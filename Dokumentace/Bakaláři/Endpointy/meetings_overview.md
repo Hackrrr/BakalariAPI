@@ -86,7 +86,7 @@ Vrací se [Success JSON](README.md#Success%20JSON):
    }
 }
 ```
-Ano, response je velký... A ano - přes 90% hodnot je neplatných (např. asi tak všechno info o schůzce). Jediné údaje, kterým se dá věřit, tak jsou v klíčích `Id`, `MeetingStart`, `Title`, `OwnerId` a `OwnerName`. Naštěstí chceme tenhle response hlavně kvůli IDčkům schůzek, které můžeme využít u endpointu `meetings_info`. (Pro popis klíčů viz již zmiňovaný endpoint `meetings_info`. Zajímavostí je ale to, že tady je v klíči `OwnerName` validní hotnota.)
+Ano, response je velký... A ano - přes 90% hodnot je neplatných (např. asi tak všechno info o schůzce). Jediné údaje, kterým se dá věřit, tak jsou v klíčích `Id`, `MeetingStart`, `Title`, `OwnerId` a `OwnerName`. Naštěstí chceme tenhle response hlavně kvůli IDčkům schůzek, které můžeme využít u [endpointu `meetings_info`](meetings_info.md). (Pro popis klíčů viz již zmiňovaný endpoint `meetings_info`. Zajímavostí je ale to, že tady je v klíči `OwnerName` validní hotnota.)
 
 # Request 1
 Tak to by byl jeden způsob jak získat IDčka schůzek. Druhý způsob je scraping. Posíláme ted GET request:
