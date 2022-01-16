@@ -1,6 +1,6 @@
 [project]
 name = "BakalariAPI"
-version = "4.0.0-dev"
+version = "4.0.0"
 description = "API pro Bakaláře"
 readme = "README.md"
 python-requires = ">=3.9"
