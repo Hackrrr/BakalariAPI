@@ -27,8 +27,11 @@ from prompt_toolkit.key_binding import KeyPress
 from prompt_toolkit.keys import Keys
 from rich.console import Console
 from rich.logging import RichHandler
-from rich.progress import BarColumn, Progress, TaskID, TimeRemainingColumn
+from rich.progress import BarColumn, Progress, ProgressColumn
+from rich.progress import Task as _Task
+from rich.progress import TaskID
 from rich.syntax import Syntax
+from rich.text import Text
 from rich.traceback import install as tb_install
 from urllib3.exceptions import InsecureRequestWarning
 
@@ -72,7 +75,7 @@ class Args:
     verbose: int = 0
 
     test: int | None = None
-    auto_run: bool = False
+    auto_run: bool = True
     no_init: bool = False
     no_import: bool = False
     disable_config: bool = False
@@ -80,6 +83,7 @@ class Args:
     commands: list[str] = field(default_factory=list)
 
 
+cmdArgs: dict[str, Any]
 args: Args
 
 
@@ -200,7 +204,14 @@ def show(obj: bakalariapi.objects.BakalariObject, title: str | None = None):
     if isinstance(obj, bakalariapi.Komens):
         rich_print(obj.format(True))
         print("\n\n")
-        print_keys([("P - Potrvrdí přečtení zprávy", "" if obj.confirmed else "green")])
+        print_keys(
+            [
+                (
+                    "P - Potrvrdí přečtení zprávy",
+                    "bright_black" if obj.confirmed else "green",
+                )
+            ]
+        )
 
         def komens_key_handler(key_press: KeyPress, done: Callable):
             if key_press.key == "p":
@@ -253,8 +264,11 @@ def show(obj: bakalariapi.objects.BakalariObject, title: str | None = None):
 
         print_keys(
             [
-                ("H - Označí úkol jako hotový", "" if obj.done else "green"),
-                "N - Označí úkol jako nehotový",
+                (
+                    "H - Označí úkol jako hotový",
+                    "bright_black" if obj.done else "green",
+                ),
+                ("N - Označí úkol jako nehotový", "" if obj.done else "bright_black"),
                 "Z - Zobrazí HTML úkolu",
             ]
         )
@@ -358,7 +372,7 @@ def save_config():
     with get_io_file(CONFIG_FILE, True) as f:
         # Indent, protože chci, aby to šlo přehledně upravit i z editoru (i když k tomu nejspíše nikdy nedojde)
         # (a navíc alespoň nemusí řešit formátování při "config show")
-        json.dump(args.__dict__, f, indent=4)
+        json.dump(cmdArgs, f, indent=4)
 
 
 def disable_ssl():
@@ -701,7 +715,11 @@ def Command_Ukoly(fast: bool = False, force_fresh: bool = False):
         print("Nebyly nalezeny žádné aktualní úkoly")
         return
     print(f"Úkoly načteny (hotové {hotove}, nehotové {nehotove})")
-    zobraz_hotove = fast or dialog_ano_ne("Chte zobrazit již hotové úkoly?")
+    try:
+        zobraz_hotove = fast or dialog_ano_ne("Chte zobrazit již hotové úkoly?")
+    except KeyboardInterrupt:
+        print("\n")
+        return
     count = 1
     for ukol in ukoly:
         try:
@@ -718,9 +736,13 @@ def Command_Ukoly(fast: bool = False, force_fresh: bool = False):
             break
 
 
-def Command_Konec(nice: bool = True):
+def Command_Konec(nice: bool = True, export_data: bool = True):
     shell_instance.stop_loop()
     api.kill(nice)
+    if export_data:
+        with get_io_file("main", True) as f:
+            json.dump(api.looting.export_data(), f, ensure_ascii=False)
+            f.truncate()
 
 
 def Command_Export(file_name: str = "main"):
@@ -981,13 +1003,16 @@ def Test6():
 ##################################################
 def main():
     global api
+    global cmdArgs
     global args
 
-    def load_args_from_config() -> dict | None:
-        global args
-        with get_io_file(CONFIG_FILE, True) as f:
-            parsed = json.load(f)
-        return parsed
+    def load_args_from_config() -> dict[str, Any] | None:
+        try:
+            with get_io_file(CONFIG_FILE, False) as f:
+                parsed = json.load(f)
+            return parsed
+        except FileNotFoundError:
+            return None
 
     parser = argparse.ArgumentParser(
         description="Shell integrující funkcionalitu BakalářiAPI",
@@ -1040,15 +1065,13 @@ def main():
         default=None,
     )
     parser.add_argument(
-        "-a",
-        "--auto-run",
-        help="Pokud je tato flaga přítomna, spustí se automatické úlohy",
-        action="store_true",
+        "--no-auto-run",
+        help="Pokud je tato flaga přítomna, automatické úlohy se nespustí",
+        action="store_false",
         dest="auto_run",
         default=None,
     )
     parser.add_argument(
-        "-n",
         "--no-init",
         help="Pokud je tato flaga přítomna, nebude BakalariAPI instance automaticky inicializována",
         action="store_true",
@@ -1092,9 +1115,20 @@ def main():
     # Jelikož hodnoty filtrujeme, tak pokud i po filtrování je "disable_config"
     # v "parsed" tak má hodnotu `True`, tudíž se můžeme dotazovat (jen) přes `in`
     if not ("disable_config" in parsed):
-        from_config = load_args_from_config()
-        if from_config is not None:
+        try:
+            from_config = load_args_from_config()
+        except json.JSONDecodeError:
+            from_config = None
+            rich_print(
+                "Konfigurační soubor je poškozen, zvaž vytvoření nového pomocí příkazu 'config save'"
+            )
+        if from_config is None:
+            rich_print(
+                "Konfigurační soubor nenalezen, nový lze vytvořit pomocí příkazu 'config save'"
+            )
+        else:
             parsed = from_config | parsed
+    cmdArgs = parsed
     args = Args(**parsed)
 
     # Verbose:
@@ -1162,9 +1196,11 @@ def main():
 
     rich_print(
         f"Bakalarishell připraven - verze BakalářiAPI je "
-        + f"[green_yellow]{bakalariapi.__version__}[/green_yellow]"
-        if "dev" in bakalariapi.__version__
-        else f"[bright_cyan]{bakalariapi.__version__}[/bright_cyan]"
+        + (
+            f"[green_yellow]{bakalariapi.__version__}[/green_yellow]"
+            if "dev" in bakalariapi.__version__
+            else f"[bright_cyan]{bakalariapi.__version__}[/bright_cyan]"
+        )
     )
 
     lasttime: datetime = datetime.max
@@ -1224,10 +1260,37 @@ def main():
             ]
 
             def autorun():
+                # Zkusil jsem implementovat vlastní řešení pro 0-length progress bary,
+                # ale vypadá to, že se progress bar nakonci nerefreshne
+                # Uvidím, jestli se to nějak nespraví tímto https://github.com/Textualize/rich/issues/1054
+                # jinak asi otevřu issue
+                class TimeRemainingColumn(ProgressColumn):
+                    max_refresh = 0.5
+
+                    def render(self, task: _Task):
+                        remaining = 0 if task.finished else task.time_remaining
+                        if remaining is None:
+                            return Text("-:--:--", style="progress.remaining")
+                        return Text(
+                            str(timedelta(seconds=int(remaining))),
+                            style="progress.remaining",
+                        )
+
+                class PercentageColumn(ProgressColumn):
+                    max_refresh = 0.5
+
+                    def render(self, task: _Task):
+                        return Text(
+                            "100%"
+                            if task.finished
+                            else "{task.percentage:>3.0f}%".format(task=task),
+                            style="progress.percentage",
+                        )
+
                 with Progress(
                     "[progress.description]{task.description}",
                     BarColumn(),
-                    "[progress.percentage]{task.percentage:>3.0f}%",
+                    PercentageColumn(),
                     "{task.completed}/{task.total}",
                     TimeRemainingColumn(),
                 ) as progress:
@@ -1473,6 +1536,14 @@ def prepare_shell():
         default=True,
         dest="nice",
     )
+    parser.add_argument(
+        "-n",
+        "--no-export",
+        help="Pokud je tato flaga přítomna, neprovede export dat",
+        action="store_false",
+        default=True,
+        dest="export_data",
+    )
     shell_instance.add_command(
         shell.Command(
             "exit",
@@ -1495,7 +1566,7 @@ def prepare_shell():
             "export",
             Command_Export,
             argparser=parser,
-            short_help="Exportuje data z daného souboru",
+            short_help="Exportuje data do daného souboru",
             spread_arguments=True,
         )
     )

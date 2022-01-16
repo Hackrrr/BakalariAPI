@@ -8,6 +8,7 @@ Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 ### Added
 - Přidána možnost "inliningu" při komplexní serializaci (defaultně) - Reference, které odkazují na objekt, který je referencován pouze touto referencí se při "inliningu" nahradí referencovaným objektem; více informací v [dokumentu o serializaci](/Dokumentace/BakalariAPI/serializace.md#Inlining).
 - `bakalarishell` nyní automaticky importuje předešlá data; Lze vypnout novým parametrem `--no-import`
+- `bakalarishell` nyní automaticky exportuje data při vypnutí; Lze vypnout novým parametrem `-n/--no-export` u příkazu `exit`
 - `bakalarishell` nyní po zapnutí vypíše obecné shrnutí
 
 ### Changed
@@ -17,11 +18,17 @@ Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 - Lepší porovnávání podporované verze Bakalářů a hranice zvýšena na "1.45"
 - `bakalarishell` nyní všechny soubory vytváří s utf-8 kódováním; Tohle je drastická změna a bohužel může nastat situace, kdy nastane `UnicodeDecodeError` při importu starých dat. V tom případě je potřeba manuálně změnit kódování starých souborů na utf-8.
 - `bakalarishell` nyní používá progress bary z `rich` modulu
+- Autorun obdžel několik vylepšení a je nyní ve výchozím stavu zapnut
+- Uložená konfigurace nyní neobsahuje hodnoty, které byly automaticky doplněny
 - Různé další vylepšení `bakalarishell`u
+
+### Removed
+- Odtraněn parametr `-n` (alias parametru `--no-init`), jelikož `--no-*` parametrů je již více a již to zavání nedorozuměním
 
 ### Fixed
 - Opravena serializace `list` instancí
 - Opraven `SeleniumHandler`
+- Opraven bug při spouštění `bakalarishell`, pokud nebyla vytvořena konfigurace
 
 ### Deprecated
 - Data, která byla serilizována starší verzí, nebudou v dalších verzích podporována - aby data byla aktualizována na novou verzi, je potřeba je načíst a opětovně uložit
