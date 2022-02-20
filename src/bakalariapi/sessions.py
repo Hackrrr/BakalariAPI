@@ -7,7 +7,7 @@ import json
 from abc import ABC, abstractmethod
 from threading import Lock, Thread
 from time import sleep
-from typing import TypeVar, cast
+from typing import TypeVar
 
 import requests
 from selenium.webdriver.remote.webdriver import WebDriver
@@ -296,7 +296,7 @@ class SessionManager:
     def __init__(self, ref: BakalariAPI, start_auto_extend: bool = False):
         self.__lock = Lock()
         self.bakalariAPI: BakalariAPI = ref
-        self.sessions: dict[type[BakalariSession], list[BakalariSession]] = {}
+        self.sessions: utils.ListDict[BakalariSession] = utils.ListDict()
         self.start_auto_extend: bool = start_auto_extend
         atexit.register(self.kill_all, False)
 
@@ -319,7 +319,10 @@ class SessionManager:
         return session
 
     def get_session(
-        self, session_class: type[Session], set_busy=True, filter_busy=True
+        self,
+        session_class: type[Session],
+        set_busy: bool = True,
+        filter_busy: bool = True,
     ) -> Session | None:
         """Navrátí (volnou) session daného typu. Pokud taková neexistuje, vrátí None.
 
@@ -337,18 +340,14 @@ class SessionManager:
             for session in self.sessions[session_class]:
                 if not (filter_busy and session.busy):
                     session.busy = set_busy
-                    # Tady `cast` prostě být musí, protože nelze udělat "inteligentní" `dict`, kde každý klíč má určitý typ,
-                    # ale pokud je správná logika přidávání sessionů do `self.sessions`, tak jsme v pohodě.
-                    # TODO: BTW když tak nad tím přemýšlím - každý klíč může mít jiný typ... Máme přeci `TypedDict`,
-                    # takže jeden problém vyřešen. Druhý problém je ale ten, že by bylo fajn to mít dynamické dle,
-                    # definovaných tříd které derivují z `BakalariSession. A kdyby to nešlo, tak bych rád zkusil
-                    # udělat statický, jak to s tím půjde - přeci jen se to týká dvou tříd a na typování `self.sessions`,
-                    # závisí pouze tento script.
-                    return cast(Session, session)
+                    return session
         return None
 
     def get_session_or_create(
-        self, session_class: type[Session], set_busy=True, filter_busy=True
+        self,
+        session_class: type[Session],
+        set_busy: bool = True,
+        filter_busy: bool = True,
     ) -> Session:
         """Navrátí (volnou) session daného typu. Pokud taková neexistuje, vrátí None.
 
@@ -409,7 +408,7 @@ class SessionManager:
                 for sessions in self.sessions.values():
                     for session in sessions:
                         session.kill(nice)
-                self.sessions = {}
+                self.sessions = utils.ListDict()
             else:
                 for session in self.sessions[session_class]:
                     session.kill(nice)

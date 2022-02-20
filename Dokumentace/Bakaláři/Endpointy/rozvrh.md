@@ -74,7 +74,7 @@ Klíč `"subjecttext"` je skoro stejný jako u `type` `"atom"`, liší se v tom,
 Speciální případ jsou volné dny. U nich totiž neexistuje JSON. "Záznam" pro volné dny v rozvrhu vypadá takto:
 ```html
 <div class="day-row normal" style="height:87px;">
-	<div class="odd-day-row"> <!-- Tenhle <div> je zde pro každou lichou řádku (tedy ÚT a ČT), protože asi někdo CSS modifikátory -->
+	<div class="odd-day-row"> <!-- Tenhle <div> je zde pro každou lichou řádku (tedy ÚT a ČT), protože asi někdo nezná CSS modifikátory -->
 		<div class="clearfix">
 			<div class="day-name odd-name normal" style="height:87px;">
 				<div> čt

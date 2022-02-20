@@ -1323,6 +1323,7 @@ def main():
 
     if "exit" not in args.commands and (not args.no_import or args.auto_run):
         print()
+        nothing = True
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         today_aware = (
             datetime.now()
@@ -1343,6 +1344,7 @@ def main():
                 f"Z předmětu [magenta]{znamka.subject}[/magenta] známka [bright_green]{znamka.grade}[/bright_green] ze dne {znamka.date1.strftime('%d. %m. %Y')}"
                 + ("" if note == "" else f" - {note}")
             )
+        nothing &= first
 
         first = True
         for komens in filter(
@@ -1354,6 +1356,7 @@ def main():
             rich_print(
                 f"Z předmětu [magenta]{komens.subject}[/magenta] na {komens.date1.strftime('%d. %m. %Y')}"
             )
+        nothing &= first
 
         first = True
         for schuzka in filter(
@@ -1367,16 +1370,17 @@ def main():
             rich_print(
                 f"{schuzka.start_time.strftime('%H:%M %d. %m. %Y')} - {'[bright_black]Neznámý[/bright_black]' if schuzka.owner is None else f'[magenta]{schuzka.owner.name}[/magenta]'} \"{schuzka.name.strip()}\""
             )
+        nothing &= first
 
         first = True
         for ukol in filter(lambda x: not x.done, api.looting.get(bakalariapi.Homework)):
             if first:
                 first = False
                 print("Úkoly:")
-            ukol._sort_by_date
             rich_print(
                 f"Z předmětu [magenta]{ukol.subject}[/magenta] na {ukol.submission_date.strftime('%d. %m.')} - {ukol.content}"
             )
+        nothing &= first
 
         first = True
         for znamka in filter(
@@ -1395,6 +1399,11 @@ def main():
                     else ""
                 )
             )
+        nothing &= first
+
+        if nothing:
+            print("Žádné podstatné informace k zobrazení")
+            print()
 
         with get_io_file(TIME_FILE, True) as f:
             f.write(datetime.now().isoformat())

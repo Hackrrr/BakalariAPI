@@ -6,7 +6,7 @@ import logging
 import sys
 import warnings
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any, TypeVar, cast, get_args
+from typing import TYPE_CHECKING, Any, Generic, TypeVar, Union, cast, get_args, overload
 
 # Pojďme si zodpovědět ozázku, proč je tu tohle?
 # Núže... Bylo nebylo, pyright zase zklamal. Teda ne že bych se divil,
@@ -51,7 +51,9 @@ LOGGER = logging.getLogger("bakalariapi.utils")
 
 
 T0 = TypeVar("T0")
+T0_co = TypeVar("T0_co", covariant=True)
 T1 = TypeVar("T1")
+T1_co = TypeVar("T1_co", covariant=True)
 T2 = TypeVar("T2")
 
 
@@ -369,3 +371,77 @@ class _CustomChecks(_ProtocolMeta):
         if issubclass(type(self), _CustomChecks) and hasattr(self, "__subclasscheck__"):
             return self.__subclasscheck__(subclass)  # type: ignore # "__subclasscheck__" neexsituje :)
         return type.__subclasscheck__(self, subclass)
+
+
+# Už dlouho jsme nic nerozbíleji, je čas to změnit.
+# Dnes máme na programu dne slovník, jehož záznamy by se daly anotovat jako:
+#   Klíč: T0
+#   Hodnota: list[T0]
+# Tudíž např. pokud přítoupíme ke klíči `int`, dostaneme `list[int]`.
+# Bohužel tohoto nelze docílit skrze současný systém typování v Pythonu.
+# Řešení je jednoduché, že? Jen vytvoříme sub-type slovníku/`dict`.
+# Samozřejmě, že ne :) Problémy objevily hned po zkoušce užití. Budeme
+# muset tedy zase trochu hackovat Python (resp. typování v Pythonu).
+# Spoiler alert: Nepůjde to; Alespoň ne 100% správně :(
+# Problém je, že chceme mít slovník daného typu. Tzn., že T0 chceme mít bounded
+# k typu, který specifikujeme při anotaci (`ListDict[Base]`). Problém je,
+# že nyní nemůžeme napsat `__getitem__(self, k: type[T0]) -> list[T0]`.
+# Proč? Protože by jsme vlastně napsali `(k: type[Base]) -> list[Base]`, což
+# ale není to co chceme. Špatně to vlastně není, ale my chceme mít typ listu
+# více specifikovaný (na typ, který je v parametru).
+# A celý tento problém je, že nemůžeme udělat typevar bounded typevarem. Nyní
+# totiž musíme napsat `(k: type[T1]) -> list[T1]` (musíme použít jiný typever),
+# ale tento jiný typevar nemá žádnou spojitost s originálním, takže můžeme
+# napsat `d: ListDict[Base]; reveal_type(d[int])` a type checker vše povolí
+# (a vyhodí typ `int`), protože nikdo neomezil typevar T1. Řešení neexistuje.
+# Je možné, že řešení půjde udělat skrze kovariatní return type (typevaru T0),
+# ale IDK, jestli to bude povolený až se (jestli vůbec) povede přijmout PEP
+# poskytující nový syntax pro kontra-/ko- varianci:
+#   https://github.com/python/typing/issues/813
+#   https://github.com/python/peps/pull/2045
+#
+# Další problém je, že ne všechny věci lze v takovémto slovníku udělat.
+# Např. class metoda `.fromkeys()`. To jest dáno tím, že jsem neudělal nic :).
+# Jediné, co jsem provedl, je úprava type anotací metod a runtime implementace
+# je buď `NotImplementedError` nebo `super()`. Z toho také plyne následek, že
+# runtime se tento (nový) slovník chová prakticky stejně a je možné ho jednoduše
+# invalidovat - zde se spoléhá na ochranu přes statické type checkery. Poslední
+# věc je inicializace. Nelze inicializovat dosazením `{}`. Ničemu to neškodí,
+# ale docela mě štve, že to udělat nelze.
+
+# BTW tohle je vzácný případ deaktivace formátování - jelikož se jedná prakticky
+# jedná pouze o type anotace, které se ovšem nenacházejí v ".pyi", black je bere
+# jako normální funkce a tak je také formátuje. Naneštěstí takovéto formátování
+# vypadá v tomto případě otřesně (např. `...` na novém řádku).
+# fmt: off
+class ListDict(dict[type[T0], list[T0]], Generic[T0]):
+    # T1 by měl mít T0 jako upper bound, ale to v Pythonu napsat nejde
+    def __init__(self):
+        """
+        """
+        pass
+        
+    @classmethod
+    def fromkeys(cls, __iterable, __value): raise NotImplementedError()
+
+    @overload
+    def get(self, __key: type[T1]) -> Union[list[T1], None]: ...
+    @overload
+    def get(self, __key: type[T1], __default: Union[list[T1], T2]) -> Union[list[T1], T2]: ...
+    def get(self, *args, **kwargs) -> Any: return super().get(*args, **kwargs)
+
+    @overload
+    def pop(self, __key: type[T1]) -> list[T1]: ...
+    @overload
+    def pop(self, __key: type[T1], __default: Union[list[T1], T2] = ...) -> Union[list[T1], T2]: ...
+    def pop(self, *args, **kwargs) -> Any: return super().pop(*args, **kwargs)
+
+    def __getitem__(self, __k: type[T1]) -> list[T1]: return super().__getitem__(__k) #type: ignore
+    def __setitem__(self, __k: type[T1], v: list[T1]) -> None: return super().__setitem__(__k, v) #type: ignore
+
+    if sys.version_info >= (3, 9):
+        def __class_getitem__(cls, __item): raise NotImplementedError()
+        def __or__(self, __value): raise NotImplementedError()
+        def __ror__(self, __value): raise NotImplementedError()
+        def __ior__(self, __value): raise NotImplementedError()
+# fmt: on

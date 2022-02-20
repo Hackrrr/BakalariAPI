@@ -18,6 +18,7 @@ from datetime import datetime
 from typing import (
     Any,
     Callable,
+    ClassVar,
     Literal,
     Mapping,
     Protocol,
@@ -53,7 +54,7 @@ SerializableValue = Union[
     SerializablePrimitive,
     Mapping[str, "SerializableValue"],  # type: ignore # Mypy nepodporuje rekurzi  https://github.com/python/mypy/issues/731
     Sequence["SerializableValue"],  # type: ignore # Mypy nepodporuje rekurzi  https://github.com/python/mypy/issues/731
-    "Serializable",
+    "Serializable[Any]",
     "SerializedData",  # Kupodivu to funguje, ale čekám, že se to jednou zase rozbije
 ]
 RawSerializableValue = Union[
@@ -109,7 +110,7 @@ class Serializable(Protocol[TRawSerializableValue]):
 
 @runtime_checkable
 class Upgradeable(Protocol, metaclass=_CustomChecks):
-    deserialization_keys: set[str]
+    deserialization_keys: ClassVar[set[str]]
 
     @classmethod
     def upgrade(

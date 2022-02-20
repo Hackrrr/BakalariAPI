@@ -3,7 +3,11 @@ Všechny důležité změny v tomto projektu budou zdokumentovány v tomto soubo
 
 Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) a podléhá [Sémantickému verzování](https://semver.org/spec/v2.0.0.html).
 
-## [4.0.0] - Unreleased
+## Unreleased
+### Changed
+- `objects.Homework.mark_as_done()` nyní aktualizuje i svoji hodnotu
+
+## [4.0.0] - 16. 1. 2022
 
 ### Added
 - Přidána možnost "inliningu" při komplexní serializaci (defaultně) - Reference, které odkazují na objekt, který je referencován pouze touto referencí se při "inliningu" nahradí referencovaným objektem; více informací v [dokumentu o serializaci](/Dokumentace/BakalariAPI/serializace.md#Inlining).

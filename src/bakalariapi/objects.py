@@ -526,6 +526,7 @@ class Homework(BakalariObject):
                 # "studentId": studentID
             },
         )
+        self.done = value
 
     def format(self, rich_colors: bool = False) -> str:
         if len(self.files) > 0:
@@ -551,3 +552,46 @@ class Homework(BakalariObject):
             "\n"
             f"{bs_get_text(parseHTML(self.content))}"
         )
+
+
+class Lesson(BakalariObject):
+    """Třída/objekt držící informace o vyučovací hodině"""
+
+    def __init__(
+        self,
+        ID: str,
+        date: datetime | None,
+        lessonNumber: int,  # = Číslo/Pořadí hodiny v daném dnu
+        teacher: str | None,
+        room: str | None,
+        group: str | None,
+        main_message: str,
+        secondary_message: str | None,
+        change_info: str | None,
+        homeworks: list[Homework] | None,
+        absence: str | None,
+    ):
+        super().__init__(ID)
+        self.date: datetime | None = date
+        self.lessonNumber: int = lessonNumber
+        self.teacher: str | None = teacher
+        self.room: str | None = room
+        self.group: str | None = group
+        self.main_message: str = main_message
+        self.secondary_message: str | None = secondary_message
+        self.change_info: str | None = change_info
+        self.homeworks: list[Homework] = [] if homeworks is None else homeworks
+        self.absence: str | None = absence
+
+    @property
+    def is_permanent(self) -> bool:
+        return self.date is None
+
+    @property
+    def is_removed(self):
+        # Stačí ověřit jen jednu hodnotu; pokud je `None`, ostatní by měli být také `None`
+        return self.teacher is None
+
+    @property
+    def is_changed(self) -> bool:
+        return self.change_info is not None
