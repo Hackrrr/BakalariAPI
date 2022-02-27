@@ -1,4 +1,6 @@
 """Modul obsahující funkce týkající se Komens zpráv."""
+from __future__ import annotations
+
 from datetime import datetime
 from typing import cast
 
@@ -14,7 +16,9 @@ from ..utils import parseHTML
 
 
 def getter_komens_ids(
-    bakalariAPI: BakalariAPI, from_date: datetime = None, to_date: datetime = None
+    bakalariAPI: BakalariAPI,
+    from_date: datetime | None = None,
+    to_date: datetime | None = None,
 ) -> GetterOutput[BeautifulSoup]:
     """Získá IDčka daných Komens zpráv.
 

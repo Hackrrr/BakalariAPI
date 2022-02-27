@@ -13,7 +13,7 @@ import time
 import traceback
 import warnings
 import webbrowser
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from datetime import datetime, timedelta
 from typing import IO, TYPE_CHECKING, Any, Callable, cast
 
@@ -35,21 +35,7 @@ from rich.text import Text
 from rich.traceback import install as tb_install
 from urllib3.exceptions import InsecureRequestWarning
 
-# Takový hack na to, aby `bakalarishell` šel spustit také přímo ze zdrojové složky
-# Pokud se `bakalarishell` spustí jako modul (= přes `import`), tak vše proběhne v pořádku
-# Pokud se ale spustí přes "python main.py" nebo "python bakalarishell" (kde "bakalarishell"
-# je složka), tak relativní `import` selže ("ImportError: attempted relative import with no
-# known parent package") a `shell` se naimportuje "přímo" (resp. ne relativně), což už je v pořádku.
-# Pozn.: Pokud někdo dumá nad tím, proč zde tedy není jen druhá možnost, tak to je
-# kvůli tomu, že ta zase pro změnu nefugnuje při importu jako modul, jelikož v tom případě
-# hledá modul `shell` jako "globální" modul (ne jako "lokální" ve složce), tudíž selže.
-if TYPE_CHECKING:
-    from . import shell
-else:
-    try:
-        from . import shell
-    except ImportError:
-        import shell
+from . import shell
 
 tb_install(show_locals=True)
 cls = shell.cls
@@ -74,16 +60,28 @@ class Args:
 
     verbose: int = 0
 
-    test: int | None = None
     auto_run: bool = True
     no_init: bool = False
     no_import: bool = False
-    disable_config: bool = False
+    no_config: bool = False
 
     commands: list[str] = field(default_factory=list)
 
+    @classmethod
+    def from_dict(cls, dct: dict[str, Any]) -> Args:
+        allowed = [x.name for x in fields(cls)]
+        old2new = {
+            "disable_config": "no_config",
+        }
+        filtered = {}
+        for x in dct:
+            x = old2new.get(x, x)
+            if x in allowed:
+                filtered[x] = dct[x]
+        return Args(**filtered)
 
-cmdArgs: dict[str, Any]
+
+argsToSave: dict[str, Any]
 args: Args
 
 
@@ -370,9 +368,10 @@ def get_io_file(file: str, create_file: bool, mode: str = "r+") -> IO:
 
 def save_config():
     with get_io_file(CONFIG_FILE, True) as f:
+        f.truncate()
         # Indent, protože chci, aby to šlo přehledně upravit i z editoru (i když k tomu nejspíše nikdy nedojde)
         # (a navíc alespoň nemusí řešit formátování při "config show")
-        json.dump(cmdArgs, f, indent=4)
+        json.dump(argsToSave, f, indent=4)
 
 
 def disable_ssl():
@@ -771,11 +770,14 @@ def Command_Config(namespace: dict[str, Any]):
     cmd = namespace["cmd"]
     config_path = get_io_filepath(CONFIG_FILE)
     if cmd == "show":
+        print("Uložená konfigurace:")
         if os.path.exists(config_path):
             with open(config_path, "r") as f:
                 rich_print(Syntax(f.read(), "json"))
         else:
             print("Žádná konfigurace není uložená")
+        print("Běžící konfigurace:")
+        rich_print(args.__dict__)
     elif cmd == "save":
         save_config()
         print("Konfigurace uložena")
@@ -806,15 +808,16 @@ def Command_Config(namespace: dict[str, Any]):
 ##################################################
 
 
-def RunTest(ID: int):
-    m = __import__(__name__)
-    t = f"Test{ID}"
+def RunTest(name: str):
+    # Vážně, kdo krucinál vymyslel, že tam prostě musí být `[""]`, aby se importoval nested modul?
+    m = __import__(__name__, None, None, [""])
+    t = f"Test{name.capitalize()}"
     if hasattr(m, t):
-        rich_print(f"Zahajuji test {ID}")
+        rich_print(f"Zahajuji test '{name}'")
         try:
             o = getattr(m, t)()
             rich_print(
-                f"Test {ID} skončil" + ("" if o is None else "; Výsledek testu:")
+                f"Test '{name}' skončil" + ("" if o is None else "; Výsledek testu:")
             )
             if o is not None:
                 rich_print(o)
@@ -822,10 +825,10 @@ def RunTest(ID: int):
             rich_print("Test skončil neúspěchem:", color="red")
             traceback.print_exc()
     else:
-        rich_print(f"Test {ID} nenalezen", color="red")
+        rich_print(f"Test '{name}' nenalezen", color="red")
 
 
-def Test0():
+def TestSession():
     print("Spouštím testování...")
     with api.session_manager.get_session_or_create(
         bakalariapi.sessions.RequestsSession
@@ -863,7 +866,7 @@ def Test0():
             print("Testování ukončeno")
 
 
-def Test1():
+def TestExport():
     # "Kopírování"
     print("Vytváření kopie dat skrze export/import...")
     data = api.looting.export_data()
@@ -909,7 +912,7 @@ def Test1():
     return (typ_mismatch, id_mismatch, id_len_mismatch)
 
 
-def Test2():
+def TestMeetings():
     print("Získávám IDčka online schůzek...")
     IDs = api._parse(
         bakalariapi.modules.meetings.getter_meetings_ids(
@@ -941,36 +944,7 @@ def Test2():
         )
 
 
-def Test3():
-    print("Tento test již není podporován... Sadge")
-    return
-    # return API.GetHomeworksIDs()
-
-
-def Test4():
-    print("Tento test již není podporován... Sadge")
-    return
-    # return API.MarkHomeworkAsDone(input("ID Úkolu: "), input("ID Studenta: "), True)
-
-
-def Test5():
-    print("Tento test již není podporován... Sadge")
-    return
-    # homeworks = API.GetHomeworks()
-    # print("Úkoly načteny...")
-    # zobrazHotove = AnoNeDialog("Chte zobrazit již hotové úkoly?")
-    # cls()
-    # for homework in homeworks:
-    #     if not zobrazHotove and homework.Done:
-    #         continue
-    #     print("*** Domácí úkol ***")
-    #     print(homework.Format())
-    #     print("\n\n")
-    #     input("Pro pokračování stiskni klávasu...")
-    #     cls()
-
-
-def Test6():
+def TestHW():
     count_total = 0
     count_invalid = 0
     try:
@@ -1003,7 +977,7 @@ def Test6():
 ##################################################
 def main():
     global api
-    global cmdArgs
+    global argsToSave
     global args
 
     def load_args_from_config() -> dict[str, Any] | None:
@@ -1056,15 +1030,6 @@ def main():
         default=None,
     )
     parser.add_argument(
-        "-t",
-        "--test",
-        type=int,
-        help="Test, který se má spustit",
-        # dest="test",
-        metavar="ID",
-        default=None,
-    )
-    parser.add_argument(
         "--no-auto-run",
         help="Pokud je tato flaga přítomna, automatické úlohy se nespustí",
         action="store_false",
@@ -1114,22 +1079,32 @@ def main():
     parsed = {k: v for k, v in vars(parser.parse_args()).items() if v is not None}
     # Jelikož hodnoty filtrujeme, tak pokud i po filtrování je "disable_config"
     # v "parsed" tak má hodnotu `True`, tudíž se můžeme dotazovat (jen) přes `in`
+    argsToSave = parsed
     if not ("disable_config" in parsed):
         try:
             from_config = load_args_from_config()
         except json.JSONDecodeError:
-            from_config = None
             rich_print(
                 "Konfigurační soubor je poškozen, zvaž vytvoření nového pomocí příkazu 'config save'"
             )
-        if from_config is None:
-            rich_print(
-                "Konfigurační soubor nenalezen, nový lze vytvořit pomocí příkazu 'config save'"
-            )
         else:
-            parsed = from_config | parsed
-    cmdArgs = parsed
-    args = Args(**parsed)
+            if from_config is None:
+                rich_print(
+                    "Konfigurační soubor nenalezen, nový lze vytvořit pomocí příkazu 'config save'"
+                )
+            else:
+                argsToSave = {
+                    x: from_config[x]
+                    for x in [
+                        "url",
+                        "username",
+                        "password",
+                        "browser",
+                        "executable_path",
+                    ]
+                } | parsed
+                parsed = from_config | parsed
+    args = Args.from_dict(parsed)
 
     # Verbose:
     #   0 - Nic
@@ -1184,9 +1159,6 @@ def main():
                 api.looting.import_data(json.loads(f.read()))
         except FileNotFoundError:
             pass
-
-    if args.test is not None:
-        RunTest(args.test)
 
     prepare_shell()
     # Chceme `main()` locals, ne `prepare_shell()` locals
@@ -1501,7 +1473,7 @@ def prepare_shell():
         )
     )
     parser = shell.ShellArgumentParser()
-    parser.add_argument("ID", help="ID testu, který se má spustit")
+    parser.add_argument("name", help="Název testu, který se má spustit")
     shell_instance.add_command(
         shell.Command(
             "test",

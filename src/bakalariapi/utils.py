@@ -230,15 +230,52 @@ def line_modifier(text: str, prefix: str = "", suffix: str = "") -> str:
     return "\n".join(lines)
 
 
-def resolve_string(string: str) -> Any:
-    """Převede 'název' na objekt."""
-    split = string.split(".")
-    if split[0] not in sys.modules:
+def resolve_string(string: str, reverse: bool = False) -> Any:
+    """Převede "název" na objekt. V případě nenalezení vrátí `None`.
+
+    Prakticky reverzní operace `get_full_type_name()`.
+
+    V určitých případech může funkce vracet něco jiného, než předpokládáte.
+    Vezměme následující (reálný) příklad:
+    Modul `bakalarishell` má submodul/package `main`, ale naneštěstí definuje i funkci `main`.
+    `resolve_string("bakalarishell.main")` by v tomto případě vrátila funkci `main`.
+    Proto tento případ existuje "primitivní" parametr `reverse`, který "hledá od zadu", resp.
+    pokusí se importovat co nejnižší (sub)modul a až poté začne brát v potaz ostatní atributy.
+    """
+    pointer = None
+    split: list[str]
+
+    if reverse:
+        split = []
+        index = len(string)
+        while True:
+            try:
+                # Python je zase divný... A protože v tomhle souboru zřejmě potkáme úplně všechny
+                # nesmyslnosti, které Python má, tak jsme zase v psaní komentáře :)
+                # `__import__` z nějakého důvodu vrací (v základu) jen top-level modul. Tzn. při
+                # pokusu o import "bakalariapi.objects" by vrátil modul "bakalariapi", nikoliv
+                # (chtěný) submodul. Abychom dostali submodul, musíme mít "non-empty" parametr
+                # `fromlist`, který, dle dokumentace, absulutně nic nedělá (doslova nic). Jeho
+                # jediný účel je buď být prázdný (default) nebo neprázdný (a umožnit tak import
+                # submodulu).
+                pointer = __import__(string[:index], fromlist=[""])
+            except ModuleNotFoundError:
+                index = string.rfind(".", 0, index)
+                if index == -1:
+                    return None
+                continue
+            if index == len(string):
+                return pointer
+            else:
+                split = [string[:index], string[index + 1 :]]
+                break
+    else:
+        split = string.split(".")
         try:
-            __import__(split[0])
+            pointer = __import__(split[0])
         except ModuleNotFoundError:
             return None
-    pointer = sys.modules[split[0]]
+
     for part in split[1:]:
         # hasattr() check, ale lepší, takže neděláme 2x getattr() (hasattr() dělá getattr() interně)
         try:

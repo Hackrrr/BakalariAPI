@@ -3,16 +3,23 @@ Všechny důležité změny v tomto projektu budou zdokumentovány v tomto soubo
 
 Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) a podléhá [Sémantickému verzování](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [4.1.0] - Unreleased
 ### Changed
-- `objects.Homework.mark_as_done()` nyní aktualizuje i svoji hodnotu
+- `objects.Homework.mark_as_done()` a `objects.Komens.confirm()` nyní aktualizují i svoji příslušnou hodnotu na objektu
+- `bakalarishell.utils.resolve_string()` nyní bere parametr `reverse` (viz docstring)
+- Předělána struktura testů v `bakalarishell`
+- Několik úprav ukládání (a načítání) konfigurace
+### Removed
+- Odstraněn parametr `-t`/`--test` při spouštění `bakalarishell`
+### Fixed
+- Opravena možná invalidace konfigurace, která nastala při uložení konfigurace, měla menší velikost, jak stávající
 
 ## [4.0.0] - 16. 1. 2022
 
 ### Added
 - Přidána možnost "inliningu" při komplexní serializaci (defaultně) - Reference, které odkazují na objekt, který je referencován pouze touto referencí se při "inliningu" nahradí referencovaným objektem; více informací v [dokumentu o serializaci](/Dokumentace/BakalariAPI/serializace.md#Inlining).
 - `bakalarishell` nyní automaticky importuje předešlá data; Lze vypnout novým parametrem `--no-import`
-- `bakalarishell` nyní automaticky exportuje data při vypnutí; Lze vypnout novým parametrem `-n/--no-export` u příkazu `exit`
+- `bakalarishell` nyní automaticky exportuje data při vypnutí; Lze vypnout novým parametrem `--no-export` u příkazu `exit`
 - `bakalarishell` nyní po zapnutí vypíše obecné shrnutí
 
 ### Changed

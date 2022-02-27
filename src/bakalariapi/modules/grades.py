@@ -1,4 +1,6 @@
 """Modul obsahující funkce týkající se známek."""
+from __future__ import annotations
+
 import json
 from datetime import datetime
 from typing import cast
@@ -14,7 +16,7 @@ from ..utils import parseHTML
 
 
 def getter(
-    bakalariAPI: BakalariAPI, from_date: datetime = None
+    bakalariAPI: BakalariAPI, from_date: datetime | None = None
 ) -> GetterOutput[BeautifulSoup]:
     """Získá dané známky."""
     with bakalariAPI.session_manager.get_session_or_create(RequestsSession) as session:

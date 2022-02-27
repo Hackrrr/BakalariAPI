@@ -272,6 +272,7 @@ class Komens(BakalariObject):
         bakalariAPI.session_manager.get_session_or_create(RequestsSession).post(
             bakalariAPI.get_endpoint(Endpoint.KOMENS_CONFIRM), json={"idmsg": self.ID}
         ).json()  # Jakože tohle jen jen ztráta výkonu... Actually to nemusíme vůbec parsovat...
+        self.confirmed = True
 
     def format(self, rich_colors: bool = False) -> str:
         return (
